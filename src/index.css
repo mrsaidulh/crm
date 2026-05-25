@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  --color-indigo-50: color-mix(in srgb, #11347a 5%, white);
+  --color-indigo-100: color-mix(in srgb, #11347a 10%, white);
+  --color-indigo-200: color-mix(in srgb, #11347a 20%, white);
+  --color-indigo-300: color-mix(in srgb, #11347a 40%, white);
+  --color-indigo-400: color-mix(in srgb, #11347a 60%, white);
+  --color-indigo-500: color-mix(in srgb, #11347a 80%, white);
+  --color-indigo-600: #11347a;
+  --color-indigo-700: color-mix(in srgb, #11347a 80%, black);
+  --color-indigo-800: color-mix(in srgb, #11347a 60%, black);
+  --color-indigo-900: color-mix(in srgb, #11347a 40%, black);
+  
+  --color-indigo-950: color-mix(in srgb, #11347a 25%, black);
+
+  --color-red-50: color-mix(in srgb, #e31837 5%, white);
+  --color-red-100: color-mix(in srgb, #e31837 10%, white);
+  --color-red-200: color-mix(in srgb, #e31837 20%, white);
+  --color-red-300: color-mix(in srgb, #e31837 40%, white);
+  --color-red-400: color-mix(in srgb, #e31837 60%, white);
+  --color-red-500: color-mix(in srgb, #e31837 80%, white);
+  --color-red-600: #e31837;
+  --color-red-700: color-mix(in srgb, #e31837 80%, black);
+  --color-red-800: color-mix(in srgb, #e31837 60%, black);
+  --color-red-900: color-mix(in srgb, #e31837 40%, black);
+  
+  --color-red-950: color-mix(in srgb, #e31837 25%, black);
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+  }
+}

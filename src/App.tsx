@@ -1,0 +1,314 @@
+import React, { useState } from 'react';
+import { LayoutDashboard, Users, MessageSquare, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck } from 'lucide-react';
+import Dashboard from './components/Dashboard';
+import LeadsView from './components/LeadsView';
+import FunnelView from './components/FunnelView';
+import TasksView from './components/TasksView';
+import SmsEmailCampaignsView from './components/SmsEmailCampaignsView';
+import FormsView from './components/FormsView';
+import CustomersView from './components/CustomersView';
+import TemplatesView from './components/TemplatesView';
+import SettingsView from './components/SettingsView';
+import WorkflowsView from './components/WorkflowsView';
+import AuditLogsView from './components/AuditLogsView';
+import { useAuth } from './lib/AuthContext';
+
+type View = 'dashboard' | 'funnel' | 'leads' | 'customers' | 'tasks' | 'campaigns' | 'templates' | 'forms' | 'workflows' | 'settings' | 'audit';
+
+
+export default function App() {
+  const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  
+  const { user, loading, signInWithEmail, signUpWithEmail, logOut } = useAuth();
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setAuthLoading(true);
+    try {
+      if (authMode === 'signin') {
+        await signInWithEmail(email, password);
+      } else {
+        await signUpWithEmail(email, password, displayName.trim() || undefined);
+      }
+    } catch (err: any) {
+      console.error(err);
+      let msg = err.message || 'Authentication failed. Please check your credentials.';
+      setErrorMsg(msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-sm w-full space-y-6">
+          <div className="text-center">
+            <div className="bg-indigo-100 p-3 rounded-xl inline-flex mb-3">
+              <GraduationCap className="w-8 h-8 text-indigo-600" />
+            </div>
+            <h1 className="text-xl font-display font-bold text-slate-900">IELTS Revolution CRM</h1>
+            <p className="text-xs text-slate-500 mt-1">
+              {authMode === 'signin' ? 'Access your administrative dashboard manually' : 'Set your manual credentials down below'}
+            </p>
+          </div>
+
+          <div className="flex border-b border-slate-100 p-0.5 bg-slate-100/60 rounded-xl">
+            <button
+              onClick={() => { setAuthMode('signin'); setErrorMsg(''); }}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${authMode === 'signin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setAuthMode('signup'); setErrorMsg(''); }}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${authMode === 'signup' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Manual Register
+            </button>
+          </div>
+
+          {authMode === 'signin' ? (
+            <div className="bg-indigo-50/70 border border-indigo-150 rounded-xl p-3.5 space-y-1">
+              <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                🔑 Manual Credentials Registry
+              </h4>
+              <p className="text-[11px] text-indigo-650 leading-relaxed">
+                Log in instantly using the default master credentials:
+              </p>
+              <div className="text-[11px] font-mono bg-white/80 p-1.5 rounded border border-indigo-100/50 mt-1 select-all">
+                Email: <span className="text-slate-800 font-bold">admin@crm.com</span><br/>
+                Password: <span className="text-slate-800 font-bold">admin123</span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-[11px] text-slate-500 leading-relaxed">
+              💡 Registered manual accounts are stored autonomously in your private browser database. No cloud/Firebase connection required for authentication.
+            </div>
+          )}
+
+          {errorMsg && (
+            <div className="bg-red-50 text-red-700 p-3.5 rounded-xl text-xs border border-red-100 font-medium">
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'signup' && (
+              <div className="animate-in slide-in-from-top-2 duration-200">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Sarah Smith"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@crm.com"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
+            >
+              {authLoading ? 'Verifying Credentials...' : authMode === 'signin' ? 'Sign In Manually' : 'Register Account'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const renderView = () => {
+    switch (currentView) {
+      case 'dashboard':
+        return <Dashboard />;
+      case 'funnel':
+        return <FunnelView />;
+      case 'leads':
+        return <LeadsView />;
+      case 'customers':
+        return <CustomersView />;
+      case 'tasks':
+        return <TasksView />;
+      case 'campaigns':
+        return <SmsEmailCampaignsView />;
+      case 'templates':
+        return <TemplatesView />;
+      case 'forms':
+        return <FormsView />;
+      case 'workflows':
+        return <WorkflowsView />;
+      case 'settings':
+        return <SettingsView />;
+      case 'audit':
+        return <AuditLogsView />;
+    }
+  };
+
+  const NavItem = ({ view, icon, label }: { view: View, icon: React.ReactNode, label: string }) => (
+    <button
+      onClick={() => {
+        setCurrentView(view);
+        setSidebarOpen(false);
+      }}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+        currentView === view
+          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+          : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900'
+      }`}
+    >
+      {icon}
+      <span className="font-medium text-sm">{label}</span>
+      {currentView === view && <ChevronRight className="w-4 h-4 ml-auto opacity-70" />}
+    </button>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r border-slate-200 shadow-sm z-50 flex flex-col transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 p-2 rounded-xl">
+              <GraduationCap className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="font-display font-bold text-lg text-slate-900 tracking-tight leading-tight">IELTS Revolution</h1>
+              <p className="text-[10px] uppercase font-bold tracking-widest text-indigo-600/80">CRM Portal</p>
+            </div>
+          </div>
+          <button 
+            className="lg:hidden text-slate-400 hover:text-slate-600"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-4">
+          Overview
+        </div>
+        <nav className="flex-1 px-4 space-y-1">
+          <NavItem view="dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard Insights" />
+        </nav>
+
+        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          Sales Team
+        </div>
+        <nav className="flex-1 px-4 space-y-1">
+          <NavItem view="funnel" icon={<KanbanSquare className="w-5 h-5" />} label="Pipeline Funnel" />
+          <NavItem view="leads" icon={<Users className="w-5 h-5" />} label="Leads Data" />
+          <NavItem view="customers" icon={<Star className="w-5 h-5" />} label="Student Management" />
+          <NavItem view="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks & Follow-ups" />
+        </nav>
+
+        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          Marketing & Automation
+        </div>
+        <nav className="flex-1 px-4 space-y-1">
+          <NavItem view="campaigns" icon={<MessageSquare className="w-5 h-5" />} label="Broadcast Campaigns" />
+          <NavItem view="templates" icon={<FileText className="w-5 h-5" />} label="Message Templates" />
+          <NavItem view="forms" icon={<FormInput className="w-5 h-5" />} label="Web Forms" />
+          <NavItem view="workflows" icon={<Zap className="w-5 h-5" />} label="Workflows" />
+        </nav>
+
+        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          Security & Admin
+        </div>
+        <nav className="px-4 space-y-1">
+          <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" />
+        </nav>
+
+        <div className="p-4 border-t border-slate-100 mt-6">
+           <nav className="space-y-1">
+             <NavItem view="settings" icon={<Settings className="w-5 h-5" />} label="Settings" />
+           </nav>
+           
+           <div className="mt-6 flex items-center gap-3 px-4 py-2">
+             <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm uppercase">
+               {user?.email?.[0] || 'A'}
+             </div>
+             <div className="flex-1 min-w-0">
+               <p className="text-sm font-medium text-slate-900 truncate">{user?.displayName || 'CRM Admin'}</p>
+               <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+             </div>
+             <LogOut onClick={logOut} className="w-4 h-4 text-slate-400 cursor-pointer hover:text-red-500 transition-colors" />
+           </div>
+        </div>
+      </aside>
+
+      {/* Main Content Areas */}
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-30 flex items-center justify-between px-6 py-4 lg:hidden">
+          <div className="flex items-center gap-3">
+            <GraduationCap className="w-6 h-6 text-indigo-600" />
+            <h1 className="font-display font-semibold text-slate-900">CRM</h1>
+          </div>
+          <button 
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto p-6 md:p-8">
+            {renderView()}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

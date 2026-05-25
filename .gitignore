@@ -1,0 +1,8 @@
+node_modules/
+build/
+# dist/ (temporarily commented out so that it is included in your ZIP and GitHub exports for easy upload to cPanel)
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example

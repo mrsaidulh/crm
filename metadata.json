@@ -1,0 +1,6 @@
+{
+  "name": "IELTS Revolution CRM",
+  "description": "Online CRM system for IELTS Revolution, with lead tracking from ads, SMS gateways, and emailing support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,247 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../lib/AuthContext';
+import { Mail, Phone, ExternalLink, ShieldCheck, FileEdit, Calculator, GraduationCap, X, UserSearch } from 'lucide-react';
+import type { Lead, MockScore } from '../types';
+import { format } from 'date-fns';
+import CustomerProfileModal from './CustomerProfileModal';
+import { calculateLeadScore } from '../utils/scoring';
+
+export default function CustomersView() {
+  const [customers, setCustomers] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [managingScoresForId, setManagingScoresForId] = useState<string | null>(null);
+  const [viewingProfileFor, setViewingProfileFor] = useState<Lead | null>(null);
+
+  const [scoreForm, setScoreForm] = useState({
+    listening: '', reading: '', writing: '', speaking: ''
+  });
+
+  const { user } = useAuth();
+  const userId = user?.uid || 'ielts_crm_main_user';
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/leads?userId=${encodeURIComponent(userId)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.leads) {
+          // filter for enrolled students only
+          const enrolled = data.leads.filter((l: Lead) => l.status === 'Enrolled');
+          enrolled.sort((a, b) => b.createdAt - a.createdAt);
+          setCustomers(enrolled);
+        }
+      })
+      .catch(error => console.error('Error fetching student list:', error))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const openScoresModal = (student: Lead) => {
+    setManagingScoresForId(student.id);
+    setScoreForm({ listening: '', reading: '', writing: '', speaking: '' });
+  };
+
+  const handleScoreSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingScoresForId) return;
+
+    const student = customers.find(c => c.id === managingScoresForId);
+    if (!student) return;
+
+    const l = parseFloat(scoreForm.listening) || 0;
+    const r = parseFloat(scoreForm.reading) || 0;
+    const w = parseFloat(scoreForm.writing) || 0;
+    const s = parseFloat(scoreForm.speaking) || 0;
+    
+    // Exact IELTS rounding logic or simple average
+    const avg = (l + r + w + s) / 4;
+    const overall = Math.round(avg * 2) / 2; // rounds to nearest 0.5
+
+    const newScore: MockScore = {
+      date: Date.now(),
+      listening: l,
+      reading: r,
+      writing: w,
+      speaking: s,
+      overall
+    };
+
+    const updatedScores = [...(student.mockScores || []), newScore];
+
+    try {
+      const response = await fetch(`/api/leads/${managingScoresForId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mockScores: updatedScores })
+      });
+      if (response.ok) {
+        setCustomers(prev => prev.map(c => c.id === managingScoresForId ? { ...c, mockScores: updatedScores } : c));
+        setManagingScoresForId(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (loading) return <div className="p-8 text-center text-slate-500 animate-pulse">Loading students...</div>;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-2xl font-display font-semibold text-slate-900">Student Management</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage enrolled students, track mock test scores, and monitor progress.</p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-slate-50/50 text-slate-500 uppercase tracking-wider text-[11px] font-semibold">
+              <tr>
+                <th className="px-6 py-4">Student</th>
+                <th className="px-6 py-4">Course Info</th>
+                <th className="px-6 py-4">Latest Mock Score</th>
+                <th className="px-6 py-4">Lead Score</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {customers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                    No enrolled students yet. Convert leads to "Enrolled" in the Pipeline.
+                  </td>
+                </tr>
+              ) : (
+                customers.map(customer => {
+                  const latestScore = customer.mockScores?.length ? customer.mockScores[customer.mockScores.length - 1] : null;
+                  const scoreDetails = calculateLeadScore(customer);
+
+                  return (
+                    <tr key={customer.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                            {customer.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-900">{customer.name}</div>
+                            <div className="text-[11px] text-slate-500" title={customer.notes}>
+                               {customer.phone}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col space-y-1">
+                          <span className="text-slate-800 font-medium text-xs flex items-center gap-1.5">
+                            <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
+                            {customer.targetCourse || 'Course Unspecified'}
+                          </span>
+                          {(customer.targetBand || customer.destination) && (
+                            <span className="text-xs text-slate-500 font-medium">
+                               Aim: {customer.targetBand ? `${customer.targetBand} Band` : 'TBD'} 
+                               {customer.destination ? ` (${customer.destination})` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {latestScore ? (
+                          <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-900 px-3 py-1.5 rounded-lg border border-indigo-100/50">
+                             <div className="font-bold text-base">{latestScore.overall.toFixed(1)}</div>
+                             <div className="w-px h-6 bg-indigo-200/50 mx-1"></div>
+                             <div className="text-[10px] space-y-0.5 font-mono text-indigo-700/80">
+                               <div className="flex gap-2"><span>L:{latestScore.listening}</span><span>R:{latestScore.reading}</span></div>
+                               <div className="flex gap-2"><span>W:{latestScore.writing}</span><span>S:{latestScore.speaking}</span></div>
+                             </div>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">No scores yet</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold ${scoreDetails.color}`}>
+                            {scoreDetails.score}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`}>
+                            {scoreDetails.level}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right flex justify-end gap-2">
+                         <button 
+                           onClick={() => setViewingProfileFor(customer)}
+                           className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors border border-emerald-100 flex items-center gap-1.5"
+                         >
+                           <UserSearch className="w-3.5 h-3.5" /> 360° Profile
+                         </button>
+                         <button 
+                           onClick={() => openScoresModal(customer)}
+                           className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
+                         >
+                           Add Mock Score
+                         </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {managingScoresForId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setManagingScoresForId(null)}></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-indigo-600" /> Log Mock Score
+              </h2>
+              <button onClick={() => setManagingScoresForId(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleScoreSubmit} className="p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Listening</label>
+                  <input type="number" step="0.5" min="0" max="9" required value={scoreForm.listening} onChange={e => setScoreForm({...scoreForm, listening: e.target.value})} className="w-full border border-slate-200 rounded-xl px-4 py-2 font-mono text-center focus:ring-2 focus:ring-indigo-500" placeholder="0.0" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Reading</label>
+                  <input type="number" step="0.5" min="0" max="9" required value={scoreForm.reading} onChange={e => setScoreForm({...scoreForm, reading: e.target.value})} className="w-full border border-slate-200 rounded-xl px-4 py-2 font-mono text-center focus:ring-2 focus:ring-indigo-500" placeholder="0.0" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Writing</label>
+                  <input type="number" step="0.5" min="0" max="9" required value={scoreForm.writing} onChange={e => setScoreForm({...scoreForm, writing: e.target.value})} className="w-full border border-slate-200 rounded-xl px-4 py-2 font-mono text-center focus:ring-2 focus:ring-indigo-500" placeholder="0.0" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Speaking</label>
+                  <input type="number" step="0.5" min="0" max="9" required value={scoreForm.speaking} onChange={e => setScoreForm({...scoreForm, speaking: e.target.value})} className="w-full border border-slate-200 rounded-xl px-4 py-2 font-mono text-center focus:ring-2 focus:ring-indigo-500" placeholder="0.0" />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-xl transition-colors shadow-sm">
+                  Save Scores
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {viewingProfileFor && (
+        <CustomerProfileModal 
+          customer={viewingProfileFor} 
+          onClose={() => setViewingProfileFor(null)} 
+        />
+      )}
+    </div>
+  );
+}

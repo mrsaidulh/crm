@@ -1,0 +1,16 @@
+{
+  "name": "ielts-crm-production",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production runtime for IELTS CRM on cPanel with MySQL",
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mysql2": "^3.22.3",
+    "dotenv": "^17.2.3",
+    "uuid": "^14.0.0"
+  }
+}

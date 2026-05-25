@@ -1,0 +1,181 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "Represents a CRM Lead profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "source": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
+        "expectedValue": { "type": "number" },
+        "targetCourse": { "type": "string" },
+        "targetBand": { "type": "string" },
+        "destination": { "type": "string" },
+        "leadScore": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "name", "email", "phone", "source", "status", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A follow-up task related to a lead",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "leadName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "number" },
+        "reminderDate": { "type": "number" },
+        "taskType": { "type": "string" },
+        "assignee": { "type": "string" },
+        "status": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "leadId", "title", "dueDate", "status", "userId"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "SMS/Email broadcast campaign logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "audience": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "body": { "type": "string" },
+        "sentAt": { "type": "number" },
+        "status": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "type", "audience", "sentAt", "status", "userId"]
+    },
+    "Template": {
+      "title": "Template",
+      "description": "SMS and Email templates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "body", "userId"]
+    },
+    "WorkflowRule": {
+      "title": "WorkflowRule",
+      "description": "Automation workflow rule for leads",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "triggerEvent": { "type": "string" },
+        "triggerCondition": { "type": "string" },
+        "actionType": { "type": "string" },
+        "actionTemplateId": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "n8nWebhookUrl": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "triggerEvent", "actionType", "isActive", "userId", "createdAt"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Third party credentials and system integrations settings",
+      "type": "object",
+      "properties": {
+        "smsProvider": { "type": "string" },
+        "smsApiUrl": { "type": "string" },
+        "smsApiKey": { "type": "string" },
+        "smsSenderId": { "type": "string" },
+        "smsClientId": { "type": "string" },
+        "smtpHost": { "type": "string" },
+        "smtpPort": { "type": "string" },
+        "smtpUsername": { "type": "string" },
+        "smtpPassword": { "type": "string" },
+        "smtpFromEmail": { "type": "string" },
+        "smtpFromName": { "type": "string" },
+        "smtpEncryption": { "type": "string" },
+        "n8nLeadCreatedUrl": { "type": "string" },
+        "n8nStatusChangedUrl": { "type": "string" },
+        "n8nTaskReminderUrl": { "type": "string" }
+      }
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Privileged CRM user account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status", "createdAt", "userId"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Historical audit trails of events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "action", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "List of all potential clients"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Action items checklist and reminder schedule"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Broadcast SMS and email transaction history"
+    },
+    "/templates/{templateId}": {
+      "schema": "Template",
+      "description": "SMS and Email templates library"
+    },
+    "/workflows/{workflowId}": {
+      "schema": "WorkflowRule",
+      "description": "Condition rules that automatically execute scripts or webhook triggers"
+    },
+    "/settings/{userId}": {
+      "schema": "UserSettings",
+      "description": "Integration settings, webhooks, and private API configuration"
+    },
+    "/team-members/{memberId}": {
+      "schema": "TeamMember",
+      "description": "Coordinating counselor staff and advisors"
+    },
+    "/audit-logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit logging events data"
+    }
+  }
+}
