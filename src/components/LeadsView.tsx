@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles } from 'lucide-react';
+import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, LeadStatus, LeadSource } from '../types';
 import { calculateLeadScore } from '../utils/scoring';
@@ -32,6 +32,170 @@ export default function LeadsView() {
     destination: 'United Kingdom',
     tags: ''
   });
+
+  const [touched, setTouched] = useState({
+    name: false,
+    email: false,
+    phone: false,
+    targetCourse: false,
+    targetBand: false,
+    destination: false
+  });
+
+  const [errors, setErrors] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    targetCourse: '',
+    targetBand: '',
+    destination: ''
+  });
+
+  const validateField = (name: string, value: string): string => {
+    switch (name) {
+      case 'name': {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return "Full name is required";
+        }
+        if (trimmed.length < 3) {
+          return "Name must be at least 3 characters";
+        }
+        if (trimmed.length > 50) {
+          return "Name must be at most 50 characters";
+        }
+        if (!/^[a-zA-Z\s'-]+$/.test(trimmed)) {
+          return "Name can only contain letters, spaces, hyphens, and apostrophes";
+        }
+        const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+        if (wordCount < 2) {
+          return "Please enter your full name (first and last)";
+        }
+        return "";
+      }
+      case 'email': {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return "Email address is required";
+        }
+        if (trimmed.length > 100) {
+          return "Email address must be at most 100 characters";
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) {
+          return "Please enter a valid email address (e.g., you@email.com)";
+        }
+        return "";
+      }
+      case 'phone': {
+        const cleaned = value.replace(/[\s-]/g, '');
+        if (!cleaned) {
+          return "Phone number is required";
+        }
+        const numeric = cleaned.replace(/^\+/, '');
+        if (numeric.startsWith('8801') && numeric.length === 13) {
+          const withoutCc = numeric.slice(2);
+          if (!/^01[3-9]\d{8}$/.test(withoutCc)) {
+            return "Please enter a valid Bangladeshi mobile number";
+          }
+        } else if (numeric.startsWith('01') && numeric.length === 11) {
+          if (!/^01[3-9]\d{8}$/.test(numeric)) {
+            return "Please enter a valid Bangladeshi mobile number";
+          }
+        } else {
+          return "Please enter an 11-digit or 13-digit Bangladeshi mobile number starting with 01 or 8801";
+        }
+        return "";
+      }
+      case 'targetCourse': {
+        if (!value || value === "") {
+          return "Please select a target course";
+        }
+        return "";
+      }
+      case 'targetBand': {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return "Target band is required";
+        }
+        const num = parseFloat(trimmed);
+        if (isNaN(num) || num < 4.0 || num > 9.0) {
+          return "Band score must be between 4.0 and 9.0";
+        }
+        if (!/^([4-8](\.[05])?|9(\.0)?)$/.test(trimmed)) {
+          return "Band score must be in 0.5 increments (e.g., 6.0, 6.5, 7.0)";
+        }
+        return "";
+      }
+      case 'destination': {
+        if (!value || value === "") {
+          return "Please select a target country";
+        }
+        return "";
+      }
+      default:
+        return "";
+    }
+  };
+
+  useEffect(() => {
+    setErrors({
+      name: validateField('name', formData.name),
+      email: validateField('email', formData.email),
+      phone: validateField('phone', formData.phone),
+      targetCourse: validateField('targetCourse', formData.targetCourse),
+      targetBand: validateField('targetBand', formData.targetBand),
+      destination: validateField('destination', formData.destination)
+    });
+  }, [formData]);
+
+  const handleInputChange = (field: 'name' | 'email' | 'phone' | 'targetCourse' | 'targetBand' | 'destination', value: string) => {
+    if (field === 'phone') {
+      const formattedInput = value.replace(/[^0-9\s-]/g, '');
+      setFormData(prev => ({ ...prev, phone: formattedInput }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleBlurField = (field: 'name' | 'email' | 'phone' | 'targetCourse' | 'targetBand' | 'destination') => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    if (field === 'name' || field === 'email' || field === 'targetBand' || field === 'targetCourse' || field === 'destination') {
+      setFormData(prev => ({ ...prev, [field]: prev[field].trim() }));
+    } else if (field === 'phone') {
+      let val = formData.phone.trim().replace(/[\s-]/g, '');
+      if (val.startsWith('01') && val.length === 11) {
+        setFormData(prev => ({ ...prev, phone: '88' + val }));
+      } else if (val.startsWith('1') && val.length === 10) {
+        setFormData(prev => ({ ...prev, phone: '880' + val }));
+      }
+    }
+  };
+
+  const getFieldStyles = (fieldName: 'name' | 'email' | 'phone' | 'targetCourse' | 'targetBand' | 'destination') => {
+    const base = "w-full border rounded-xl px-4 py-2 text-sm focus:outline-none transition-all duration-200 text-slate-850";
+    if (!touched[fieldName]) {
+      return `${base} border-slate-200 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white`;
+    }
+    if (errors[fieldName]) {
+      return `${base} border-red-400 bg-red-50/10 focus:ring-2 focus:ring-red-500/20 focus:border-red-500`;
+    }
+    return `${base} border-emerald-400 bg-emerald-50/10 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`;
+  };
+
+  const isFormValid = 
+    formData.name.trim() !== '' &&
+    formData.email.trim() !== '' &&
+    formData.phone.trim() !== '' &&
+    formData.targetCourse.trim() !== '' &&
+    formData.targetBand.trim() !== '' &&
+    formData.destination.trim() !== '' &&
+    !errors.name && 
+    !errors.email && 
+    !errors.phone && 
+    !errors.targetCourse &&
+    !errors.targetBand &&
+    !errors.destination;
 
   const { user } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
@@ -162,6 +326,22 @@ export default function LeadsView() {
       destination: 'United Kingdom',
       tags: ''
     });
+    setTouched({
+      name: false,
+      email: false,
+      phone: false,
+      targetCourse: false,
+      targetBand: false,
+      destination: false
+    });
+    setErrors({
+      name: '',
+      email: '',
+      phone: '',
+      targetCourse: '',
+      targetBand: '',
+      destination: ''
+    });
     setIsModalOpen(true);
   };
 
@@ -179,6 +359,22 @@ export default function LeadsView() {
       destination: lead.destination || 'United Kingdom',
       tags: lead.tags ? lead.tags.join(', ') : ''
     });
+    setTouched({
+      name: false,
+      email: false,
+      phone: false,
+      targetCourse: false,
+      targetBand: false,
+      destination: false
+    });
+    setErrors({
+      name: '',
+      email: '',
+      phone: '',
+      targetCourse: '',
+      targetBand: '',
+      destination: ''
+    });
     setIsModalOpen(true);
   };
 
@@ -186,15 +382,36 @@ export default function LeadsView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTouched({
+      name: true,
+      email: true,
+      phone: true,
+      targetCourse: true,
+      targetBand: true,
+      destination: true
+    });
+
+    if (!isFormValid) {
+      alert("Please resolve form validation parameters before submitting.");
+      return;
+    }
+
+    let finalPhone = formData.phone.trim().replace(/[\s-]/g, '');
+    if (finalPhone.startsWith('01') && finalPhone.length === 11) {
+      finalPhone = '88' + finalPhone;
+    } else if (finalPhone.startsWith('1') && finalPhone.length === 10) {
+      finalPhone = '880' + finalPhone;
+    }
+
     try {
       const parsedTags = formData.tags 
         ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) 
         : [];
 
       const baseData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: finalPhone,
         source: formData.source,
         notes: formData.notes,
         targetCourse: formData.targetCourse,
@@ -607,6 +824,9 @@ export default function LeadsView() {
                         <div className="flex flex-col space-y-1">
                           <span className="flex items-center gap-1.5 text-slate-600">
                             <Phone className="w-3.5 h-3.5" /> {lead.phone}
+                            {lead.phoneVerified && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Phone number verified via OTP" />
+                            )}
                           </span>
                           <span className="flex items-center gap-1.5 text-slate-500 text-xs">
                             <Mail className="w-3.5 h-3.5" /> {lead.email}
@@ -695,23 +915,35 @@ export default function LeadsView() {
                   type="text" 
                   required
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  onBlur={() => handleBlurField('name')}
+                  className={getFieldStyles('name')}
                   placeholder="John Doe"
                 />
+                {touched.name && errors.name && (
+                  <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                    ⚠️ {errors.name}
+                  </span>
+                )}
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone</label>
                   <input 
                     type="tel" 
                     required
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    onBlur={() => handleBlurField('phone')}
+                    className={getFieldStyles('phone')}
                     placeholder="0171..."
                   />
+                  {touched.phone && errors.phone && (
+                    <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                      ⚠️ {errors.phone}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
@@ -719,10 +951,16 @@ export default function LeadsView() {
                     type="email" 
                     required
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    onBlur={() => handleBlurField('email')}
+                    className={getFieldStyles('email')}
                     placeholder="john@example.com"
                   />
+                  {touched.email && errors.email && (
+                    <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                      ⚠️ {errors.email}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -772,13 +1010,21 @@ export default function LeadsView() {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Target Course</label>
                   <select 
                     value={formData.targetCourse}
-                    onChange={(e) => setFormData({ ...formData, targetCourse: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    onChange={(e) => handleInputChange('targetCourse', e.target.value)}
+                    onBlur={() => handleBlurField('targetCourse')}
+                    className={getFieldStyles('targetCourse')}
                   >
+                    <option value="">Select target course</option>
                     <option value="IELTS Academic">IELTS Academic</option>
-                    <option value="IELTS General">IELTS General</option>
-                    <option value="Spoken English">Spoken English</option>
+                    <option value="IELTS General Training">IELTS General Training</option>
+                    <option value="IELTS UKVI">IELTS UKVI</option>
+                    <option value="IELTS Life Skills">IELTS Life Skills</option>
                   </select>
+                  {touched.targetCourse && errors.targetCourse && (
+                    <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                      ⚠️ {errors.targetCourse}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Target Band</label>
@@ -786,10 +1032,16 @@ export default function LeadsView() {
                     type="number"
                     step="0.5" 
                     value={formData.targetBand}
-                    onChange={(e) => setFormData({ ...formData, targetBand: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => handleInputChange('targetBand', e.target.value)}
+                    onBlur={() => handleBlurField('targetBand')}
+                    className={getFieldStyles('targetBand')}
                     placeholder="e.g. 7.5"
                   />
+                  {touched.targetBand && errors.targetBand && (
+                    <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                      ⚠️ {errors.targetBand}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -798,15 +1050,25 @@ export default function LeadsView() {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Target Country</label>
                   <select
                     value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    onChange={(e) => handleInputChange('destination', e.target.value)}
+                    onBlur={() => handleBlurField('destination')}
+                    className={getFieldStyles('destination')}
                   >
-                    <option value="Australia">Australia</option>
+                    <option value="">Select target destination</option>
                     <option value="United Kingdom">United Kingdom</option>
                     <option value="USA">USA</option>
                     <option value="Canada">Canada</option>
-                    <option value="Others">Others</option>
+                    <option value="Australia">Australia</option>
+                    <option value="New Zealand">New Zealand</option>
+                    <option value="Germany">Germany</option>
+                    <option value="Ireland">Ireland</option>
+                    <option value="Other">Other</option>
                   </select>
+                  {touched.destination && errors.destination && (
+                    <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                      ⚠️ {errors.destination}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Expected Pipeline Value ($)</label>
@@ -830,7 +1092,12 @@ export default function LeadsView() {
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-xl transition-colors shadow-sm"
+                  disabled={!isFormValid}
+                  className={`flex-1 font-medium py-2 rounded-xl transition-colors shadow-sm ${
+                    isFormValid 
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer' 
+                      : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
                   {editingLeadId ? 'Save Changes' : 'Create Lead'}
                 </button>

@@ -8,6 +8,11 @@ export default function FormsView() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedIframe, setCopiedIframe] = useState(false);
   
+  // Custom Campaign Info
+  const [campaignSource, setCampaignSource] = useState('');
+  const [campaignCourse, setCampaignCourse] = useState('');
+  const [campaignTags, setCampaignTags] = useState('');
+
   // Custom Domain State - Defaults to window.location.origin or suggests their host
   const initialOrigin = window.location.origin.includes('run.app') || window.location.origin.includes('localhost')
     ? 'https://crm.ieltsrevolution.com'
@@ -19,7 +24,28 @@ export default function FormsView() {
   if (!user) return null;
 
   const resolvedUid = user.uid || 'ielts_crm_main_user';
-  const formUrl = `${customDomain.replace(/\/$/, '')}/form?uid=${resolvedUid}`;
+  
+  const buildFormUrl = () => {
+    let url = `${customDomain.replace(/\/$/, '')}/form`;
+    if (campaignSource || campaignCourse || campaignTags) {
+       url += `/${encodeURIComponent(campaignSource.trim() || 'organic')}`;
+       
+       if (campaignCourse || campaignTags) {
+         url += `/${encodeURIComponent(campaignCourse.trim() || 'any')}`;
+       }
+       if (campaignTags) {
+         // for path-based tags we just use the first tag, or split them
+         const tagsList = campaignTags.split(',').map(s => encodeURIComponent(s.trim())).filter(Boolean);
+         if (tagsList.length > 0) {
+           url += `/${tagsList.join('/')}`;
+         }
+       }
+    }
+    url += `?uid=${resolvedUid}`;
+    return url;
+  };
+  
+  const formUrl = buildFormUrl();
   
   const iframeCode = `<iframe src="${formUrl}" width="100%" height="600" frameborder="0" style="border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc;"></iframe>`;
 
@@ -168,6 +194,43 @@ export default function FormsView() {
             <p className="text-sm text-slate-500 mt-2 mb-6">
               Share this link directly in Facebook Ads, WhatsApp, SMS campaigns, or your email signature.
             </p>
+
+            {/* URL Builder Options */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">Campaign Link Builder (Optional)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Campaign Source</label>
+                  <input
+                    type="text"
+                    value={campaignSource}
+                    onChange={(e) => setCampaignSource(e.target.value)}
+                    placeholder="e.g. facebook, youtube"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Target Course</label>
+                  <input
+                    type="text"
+                    value={campaignCourse}
+                    onChange={(e) => setCampaignCourse(e.target.value)}
+                    placeholder="e.g. IELTS Writing"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Campaign Tags</label>
+                  <input
+                    type="text"
+                    value={campaignTags}
+                    onChange={(e) => setCampaignTags(e.target.value)}
+                    placeholder="e.g. webinar, high intent"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
 
             <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-3 border border-slate-100 mb-2">
               <input 

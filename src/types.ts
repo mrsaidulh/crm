@@ -1,4 +1,4 @@
-export type LeadSource = 'Facebook Ads' | 'Google Ads' | 'Youtube Ads' | 'Website Form' | 'Direct' | 'Referral' | 'Others';
+export type LeadSource = 'Facebook Ads' | 'Google Ads' | 'Youtube Ads' | 'Website Form' | 'Direct' | 'Referral' | 'Others' | (string & {});
 export type LeadStatus = 'New' | 'Contacted' | 'Follow-up' | 'Consultation Booked' | 'Counseling Done' | 'Demo Class' | 'Payment Pending' | 'Enrolled' | 'Discarded';
 
 export interface MockScore {
@@ -28,6 +28,7 @@ export interface Lead {
   name: string;
   email: string;
   phone: string;
+  phoneVerified?: boolean;
   source: LeadSource;
   status: LeadStatus;
   createdAt: number;

@@ -6,7 +6,7 @@ import PublicForm from './components/PublicForm.tsx';
 import './index.css';
 import { AuthProvider } from './lib/AuthContext.tsx';
 
-const isPublicForm = window.location.pathname === '/form' || window.location.pathname === '/form/';
+const isPublicForm = window.location.pathname.startsWith('/form');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

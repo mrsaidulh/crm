@@ -61,15 +61,61 @@ export default function PublicForm() {
   const [validationError, setValidationError] = useState('');
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [hiddenTags, setHiddenTags] = useState<string[]>([]);
 
-  // Parse userId from URL params query, e.g. /form?uid=123
+  // Parse userId and dynamic tracking info from URL paths or query params 
+  // Supports formats like /form/facebook/ieltswriting/webinar or ?source=facebook&course=IELTS Writing
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const uid = params.get('uid');
-    if (uid) {
-      setUserId(uid);
-    } else {
-      setStatus('error');
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+
+    let uid = params.get('uid');
+    let urlSource = params.get('source') || params.get('utm_source');
+    let urlCourse = params.get('targetCourse') || params.get('course') || params.get('utm_campaign');
+    let urlDestination = params.get('destination') || params.get('country');
+    let urlTagsParam = params.get('tags') || params.get('utm_medium') || params.get('campaign');
+
+    if (pathParts.length > 1 && pathParts[0] === 'form') {
+      if (!urlSource && pathParts.length > 1 && !pathParts[1].startsWith('uid')) {
+        urlSource = decodeURIComponent(pathParts[1]);
+      }
+      if (!urlCourse && pathParts.length > 2) {
+        urlCourse = decodeURIComponent(pathParts[2]);
+      }
+      if (pathParts.length > 3) {
+        const extraTags = pathParts.slice(3).map(decodeURIComponent);
+        if (urlTagsParam) {
+          urlTagsParam += ',' + extraTags.join(',');
+        } else {
+          urlTagsParam = extraTags.join(',');
+        }
+      }
+    }
+
+    if (!uid) {
+      uid = 'ielts_crm_main_user'; // fallback for single-tenant / general ads without explicit uid mapping
+    }
+    setUserId(uid);
+
+    let finalSource: any = 'Website Form';
+    if (urlSource) {
+      const ls = urlSource.toLowerCase();
+      if (ls.includes('facebook') || ls === 'fb') finalSource = 'Facebook Ads';
+      else if (ls.includes('google') || ls.includes('adwords')) finalSource = 'Google Ads';
+      else if (ls.includes('youtube') || ls === 'yt') finalSource = 'Youtube Ads';
+      else if (ls.includes('referral')) finalSource = 'Referral';
+      else finalSource = decodeURIComponent(urlSource);
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      source: finalSource,
+      targetCourse: urlCourse ? decodeURIComponent(urlCourse) : prev.targetCourse,
+      destination: urlDestination ? decodeURIComponent(urlDestination) : prev.destination
+    }));
+
+    if (urlTagsParam) {
+      setHiddenTags(urlTagsParam.split(',').map(s => s.trim()).filter(Boolean));
     }
   }, []);
 
@@ -337,17 +383,14 @@ export default function PublicForm() {
 
       // If OTP verified successfully, save the lead to MySQL database via API
       setStatus('submitting');
+      
+      const cleanData = getSanitizedData();
       const leadData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        source: formData.source,
-        targetCourse: formData.targetCourse,
-        targetBand: formData.targetBand,
-        destination: formData.destination,
+        ...cleanData,
         status: 'New' as LeadStatus,
         userId: userId,
-        phoneVerified: true 
+        phoneVerified: true,
+        tags: hiddenTags.length > 0 ? hiddenTags : undefined
       };
 
       const resp = await fetch('/api/leads', {
