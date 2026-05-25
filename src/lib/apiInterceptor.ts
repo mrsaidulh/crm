@@ -141,9 +141,18 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       }
       
       if (pathname === '/api/leads' && method === 'POST') {
+        const bodyCopy = { ...body };
+        if (bodyCopy.phone) {
+          let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
+          if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {
+            bodyCopy.phone = '88' + phoneCleaned;
+          } else if (phoneCleaned.startsWith('1') && phoneCleaned.length === 10) {
+            bodyCopy.phone = '880' + phoneCleaned;
+          }
+        }
         const newLead: Lead = {
           id: uuidv4(),
-          ...body,
+          ...bodyCopy,
           createdAt: Date.now()
         };
         await firebaseService.insertLead(newLead);
@@ -161,7 +170,16 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       
       if (pathname.startsWith('/api/leads/') && method === 'PUT') {
         const id = pathname.split('/').pop() || '';
-        const updated = await firebaseService.updateLead(id, body);
+        const bodyCopy = { ...body };
+        if (bodyCopy.phone) {
+          let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
+          if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {
+            bodyCopy.phone = '88' + phoneCleaned;
+          } else if (phoneCleaned.startsWith('1') && phoneCleaned.length === 10) {
+            bodyCopy.phone = '880' + phoneCleaned;
+          }
+        }
+        const updated = await firebaseService.updateLead(id, bodyCopy);
         if (updated) return jsonResponse({ lead: updated });
         return jsonResponse({ error: 'Lead not found' }, 404);
       }

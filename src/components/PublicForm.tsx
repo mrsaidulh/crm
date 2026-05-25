@@ -232,10 +232,16 @@ export default function PublicForm() {
 
   // Retrieve clean, sanitized JSON representation of form data
   const getSanitizedData = () => {
+    let rawPhone = formData.phone.replace(/[\s-]/g, '');
+    if (rawPhone.startsWith('01') && rawPhone.length === 11) {
+      rawPhone = '88' + rawPhone;
+    } else if (rawPhone.startsWith('1') && rawPhone.length === 10) {
+      rawPhone = '880' + rawPhone;
+    }
     return {
       name: sanitizeInput(formData.name.trim()),
       email: sanitizeInput(formData.email.trim().toLowerCase()), // Convert to lowercase
-      phone: sanitizeInput(formData.phone.replace(/[\s-]/g, '')),
+      phone: sanitizeInput(rawPhone),
       targetCourse: sanitizeInput(formData.targetCourse),
       targetBand: sanitizeInput(formData.targetBand.trim()),
       destination: sanitizeInput(formData.destination),
