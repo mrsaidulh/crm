@@ -424,7 +424,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as Campaign));
         return list.sort((a, b) => b.sentAt - a.sentAt);
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'campaigns');
       }
     }
@@ -438,7 +444,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'campaigns', campaign.id), campaign);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'campaigns/' + campaign.id);
       }
     }
@@ -458,7 +470,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as AuditLog));
         return list.sort((a, b) => b.createdAt - a.createdAt);
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'audit-logs');
       }
     }
@@ -472,7 +490,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'audit-logs', log.id), log);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'audit-logs/' + log.id);
       }
     }
@@ -493,7 +517,13 @@ if (String(err).toLowerCase().includes('offline')) {
         }
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.DELETE, 'audit-logs');
       }
     }
@@ -512,7 +542,13 @@ if (String(err).toLowerCase().includes('offline')) {
         const snap = await getDoc(doc(firestoreDb, 'settings', userId));
         return snap.exists() ? (snap.data() as UserSettings) : null;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.GET, 'settings/' + userId);
       }
     }
@@ -526,7 +562,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'settings', userId), settings);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.WRITE, 'settings/' + userId);
       }
     }
@@ -544,7 +586,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as Task));
         return list.sort((a, b) => a.dueDate - b.dueDate);
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'tasks');
       }
     }
@@ -558,7 +606,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'tasks', task.id), task);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'tasks/' + task.id);
       }
     }
@@ -575,7 +629,13 @@ if (String(err).toLowerCase().includes('offline')) {
         const snap = await getDoc(taskRef);
         return snap.exists() ? (snap.data() as Task) : null;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.UPDATE, 'tasks/' + id);
       }
     }
@@ -595,7 +655,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await deleteDoc(doc(firestoreDb, 'tasks', id));
         return true;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.DELETE, 'tasks/' + id);
       }
     }
@@ -620,7 +686,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as Template));
         return list;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'templates');
       }
     }
@@ -634,7 +706,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'templates', template.id), template);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'templates/' + template.id);
       }
     }
@@ -651,7 +729,13 @@ if (String(err).toLowerCase().includes('offline')) {
         const snap = await getDoc(tempRef);
         return snap.exists() ? (snap.data() as Template) : null;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.UPDATE, 'templates/' + id);
       }
     }
@@ -671,7 +755,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await deleteDoc(doc(firestoreDb, 'templates', id));
         return true;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.DELETE, 'templates/' + id);
       }
     }
@@ -696,7 +786,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as WorkflowRule));
         return list.sort((a, b) => b.createdAt - a.createdAt);
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'workflows');
       }
     }
@@ -710,7 +806,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'workflows', workflow.id), workflow);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'workflows/' + workflow.id);
       }
     }
@@ -727,7 +829,13 @@ if (String(err).toLowerCase().includes('offline')) {
         const snap = await getDoc(wfRef);
         return snap.exists() ? (snap.data() as WorkflowRule) : null;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.UPDATE, 'workflows/' + id);
       }
     }
@@ -747,7 +855,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await deleteDoc(doc(firestoreDb, 'workflows', id));
         return true;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.DELETE, 'workflows/' + id);
       }
     }
@@ -772,7 +886,13 @@ if (String(err).toLowerCase().includes('offline')) {
         snapshot.forEach((s) => list.push(s.data() as TeamMember));
         return list.sort((a, b) => b.createdAt - a.createdAt);
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.LIST, 'team-members');
       }
     }
@@ -786,7 +906,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await setDoc(doc(firestoreDb, 'team-members', teamMember.id), teamMember);
         return;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.CREATE, 'team-members/' + teamMember.id);
       }
     }
@@ -803,7 +929,13 @@ if (String(err).toLowerCase().includes('offline')) {
         const snap = await getDoc(tmRef);
         return snap.exists() ? (snap.data() as TeamMember) : null;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.UPDATE, 'team-members/' + id);
       }
     }
@@ -823,7 +955,13 @@ if (String(err).toLowerCase().includes('offline')) {
         await deleteDoc(doc(firestoreDb, 'team-members', id));
         return true;
       } catch (err) {
-        console.error(err);
+        
+if (String(err).toLowerCase().includes('offline')) {
+  console.warn('[FirebaseService] Operation suppressed (offline).');
+} else {
+  console.error('[FirebaseService] Operation failed:', err);
+}
+
         handleFirestoreError(err, OperationType.DELETE, 'team-members/' + id);
       }
     }

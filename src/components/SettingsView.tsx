@@ -347,7 +347,7 @@ export default function SettingsView() {
                       value={profileEmail}
                       onChange={(e) => setProfileEmail(e.target.value)}
                       className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      placeholder="e.g. admin@crm.com"
+                      placeholder="e.g. crm@example.com"
                     />
                   </div>
                 </div>
@@ -524,6 +524,7 @@ export default function SettingsView() {
                       >
                         <option value="custom">Custom Provider / API</option>
                         <option value="bulk_sms_bd">Bulk SMS BD</option>
+                        <option value="sms_bd">sms.bd API</option>
                         <option value="greenweb">GreenWeb SMS</option>
                       </select>
                     </div>

@@ -62,43 +62,9 @@ export default function App() {
             </div>
             <h1 className="text-xl font-display font-bold text-slate-900">IELTS Revolution CRM</h1>
             <p className="text-xs text-slate-500 mt-1">
-              {authMode === 'signin' ? 'Access your administrative dashboard manually' : 'Set your manual credentials down below'}
+              Administrator
             </p>
           </div>
-
-          <div className="flex border-b border-slate-100 p-0.5 bg-slate-100/60 rounded-xl">
-            <button
-              onClick={() => { setAuthMode('signin'); setErrorMsg(''); }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${authMode === 'signin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => { setAuthMode('signup'); setErrorMsg(''); }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${authMode === 'signup' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-            >
-              Manual Register
-            </button>
-          </div>
-
-          {authMode === 'signin' ? (
-            <div className="bg-indigo-50/70 border border-indigo-150 rounded-xl p-3.5 space-y-1">
-              <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                🔑 Manual Credentials Registry
-              </h4>
-              <p className="text-[11px] text-indigo-650 leading-relaxed">
-                Log in instantly using the default master credentials:
-              </p>
-              <div className="text-[11px] font-mono bg-white/80 p-1.5 rounded border border-indigo-100/50 mt-1 select-all">
-                Email: <span className="text-slate-800 font-bold">admin@crm.com</span><br/>
-                Password: <span className="text-slate-800 font-bold">admin123</span>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-[11px] text-slate-500 leading-relaxed">
-              💡 Registered manual accounts are stored autonomously in your private browser database. No cloud/Firebase connection required for authentication.
-            </div>
-          )}
 
           {errorMsg && (
             <div className="bg-red-50 text-red-700 p-3.5 rounded-xl text-xs border border-red-100 font-medium">
@@ -128,7 +94,7 @@ export default function App() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@crm.com"
+                placeholder="crm@example.com"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -150,7 +116,7 @@ export default function App() {
               disabled={authLoading}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
             >
-              {authLoading ? 'Verifying Credentials...' : authMode === 'signin' ? 'Sign In Manually' : 'Register Account'}
+              {authLoading ? 'Verifying Credentials...' : authMode === 'signin' ? 'Sign In' : 'Register Account'}
             </button>
           </form>
         </div>

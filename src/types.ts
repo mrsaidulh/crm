@@ -96,7 +96,7 @@ export interface TeamMember {
 }
 
 export interface UserSettings {
-  smsProvider?: 'custom' | 'bulk_sms_bd' | 'greenweb';
+  smsProvider?: 'custom' | 'bulk_sms_bd' | 'greenweb' | 'sms_bd';
   smsApiUrl?: string;
   smsApiKey?: string;
   smsSenderId?: string;

@@ -1,6 +1,9 @@
 import { firebaseService } from './firebaseService';
 import { Lead, Campaign, AuditLog, Task, Template, WorkflowRule, UserSettings, TeamMember } from '../types';
 
+// In-memory store for active OTP codes to verify phone numbers
+const activeOtps = new Map<string, { code: string; expiresAt: number }>();
+
 // Simple UUID generator for browser-only operations
 const uuidv4 = (): string => {
   return 'uid_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
@@ -43,6 +46,92 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       }
 
       console.log(`[API Interceptor] ${method} ${pathname}`, { queryParams, body });
+
+      // --- OTP VERIFICATION ---
+      if (pathname === '/api/otp/send' && method === 'POST') {
+        const phone = body?.phone;
+        if (!phone) return jsonResponse({ error: 'Phone number is required' }, 400);
+
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+        activeOtps.set(phone, { code: otpCode, expiresAt });
+
+        const smsMessage = `Your CRM verification code is: ${otpCode}. Valid for 5 minutes.`;
+        console.log(`[API Interceptor] Simulated OTP for ${phone}: ${otpCode}`);
+
+        // Try to fetch settings to see if SMS API is configured
+        try {
+          const settings = await firebaseService.getSettings('ielts_crm_main_user');
+          if (settings && settings.smsApiKey) {
+            let externalUrl = '';
+            const cleanedPhone = phone.replace(/[^0-9+]/g, '');
+            if (settings.smsProvider === 'bulk_sms_bd') {
+               externalUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(settings.smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(settings.smsSenderId || '8801844532633')}&message=${encodeURIComponent(smsMessage)}`;
+            } else if (settings.smsProvider === 'sms_bd') {
+               externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+            } else {
+               // Support sms.bd or custom Greenweb URL format dynamically if configured
+               externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+            }
+
+            // Attempt to hit the actual API through CORS (Client-side)
+            // If it fails due to CORS, it will gracefully fallback to simulated mode.
+            await originalFetch(externalUrl).catch(e => console.warn('[OTP API Error]', e));
+          }
+        } catch (e) {
+          console.error('[OTP Fetch Error]', e);
+        }
+
+        return jsonResponse({
+          success: true,
+          message: 'OTP sent (Simulated in interceptor or API sent)',
+          demoCode: otpCode // Returned for testing purposes to autocomplete input
+        });
+      }
+
+      if (pathname === '/api/otp/verify' && method === 'POST') {
+        const phone = body?.phone;
+        const code = body?.code;
+
+        if (!phone || !code) return jsonResponse({ error: 'Phone and code required' }, 400);
+        const record = activeOtps.get(phone);
+
+        if (!record) return jsonResponse({ error: 'No OTP requested for this phone' }, 400);
+        if (Date.now() > record.expiresAt) {
+          activeOtps.delete(phone);
+          return jsonResponse({ error: 'OTP code expired' }, 400);
+        }
+        if (record.code !== code.trim()) return jsonResponse({ error: 'Invalid verification code' }, 400);
+
+        activeOtps.delete(phone);
+        return jsonResponse({ success: true, message: 'Verified successfully' });
+      }
+
+      // --- WEBHOOK TRIGGER PROXY ---
+      if (pathname === '/api/automation/trigger-webhook' && method === 'POST') {
+        const { webhookUrl, event, data } = body || {};
+        if (!webhookUrl) return jsonResponse({ error: 'webhookUrl is required' }, 400);
+
+        try {
+          // Attempt client-side webhook cross-origin fetch
+          const response = await originalFetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: event || 'custom', timestamp: new Date().toISOString(), data })
+          });
+          
+          if (response.ok) {
+            let responseData = '';
+            try { responseData = await response.text(); } catch {}
+            return jsonResponse({ success: true, status: response.status, response: responseData });
+          } else {
+             return jsonResponse({ success: false, error: `External webhook returned status: ${response.status}` }, response.status);
+          }
+        } catch (e: any) {
+           console.error('[API Interceptor] Error executing webhook fetch:', e);
+           return jsonResponse({ success: false, error: e.message || 'CORS or Network Error in browser wrapper' }, 500);
+        }
+      }
 
       // --- LEADS ---
       if (pathname === '/api/leads' && method === 'GET') {

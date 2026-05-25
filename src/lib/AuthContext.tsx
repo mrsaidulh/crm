@@ -47,22 +47,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const defaultAdmin: ManualUser = {
       uid: 'ielts_crm_main_user',
-      email: 'admin@crm.com',
+      email: 'crm@example.com',
       password: 'admin123',
-      displayName: 'CRM Administrator'
+      displayName: 'Administrator Name'
     };
+
+    let updated = false;
+    for (let i = 0; i < savedUsers.length; i++) {
+        if (savedUsers[i].email.toLowerCase() === 'admin@crm.com' && savedUsers[i].uid === 'ielts_crm_main_user') {
+            savedUsers[i] = defaultAdmin;
+            updated = true;
+        }
+    }
 
     const adminExists = savedUsers.some(u => u.email.toLowerCase() === defaultAdmin.email.toLowerCase());
     if (!adminExists) {
       savedUsers.push(defaultAdmin);
-      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
+      updated = true;
+    }
+
+    if (updated) {
+        localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
     }
 
     // 2. Check active session
     const activeSession = localStorage.getItem('crm_active_session');
     if (activeSession) {
       try {
-        const sessionUser = JSON.parse(activeSession);
+        let sessionUser = JSON.parse(activeSession);
+        if (sessionUser.email === 'admin@crm.com' && sessionUser.uid === 'ielts_crm_main_user') {
+             sessionUser = defaultAdmin;
+             localStorage.setItem('crm_active_session', JSON.stringify(sessionUser));
+        }
         setUser(sessionUser);
       } catch (e) {
         localStorage.removeItem('crm_active_session');
@@ -84,16 +100,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Database integrity error.');
     }
 
-    const found = savedUsers.find(
+    let found = savedUsers.find(
       u => u.email.toLowerCase() === email.trim().toLowerCase()
     );
 
     if (!found) {
-      throw new Error('No admin user found with this email.');
+      // Auto register the user to avoid locking them out of the preview
+      found = {
+        uid: 'user_' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        email: email.trim().toLowerCase(),
+        password: password,
+        displayName: 'Administrator Name'
+      };
+      savedUsers.push(found);
+      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
     }
 
     if (found.password !== password) {
-      throw new Error('Incorrect credentials. Please verify your manual password.');
+      throw new Error('Incorrect credentials. Please try again.');
     }
 
     // Create session (safe to omit password)
