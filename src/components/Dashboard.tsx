@@ -378,7 +378,7 @@ export default function Dashboard() {
       </div>
 
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 md:grid-cols-3 gap-3 md:gap-4">
         <StatCard title="Total Leads" value={stats.totalLeads} icon={<Users className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
         <StatCard title="Pipeline Value" value={`$${stats.estimatedPipelineValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-amber-600" bg="bg-amber-100" />
         <StatCard title="Conversion Val." value={`$${stats.conversionValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-emerald-600" bg="bg-emerald-100" />
@@ -459,12 +459,12 @@ export default function Dashboard() {
 
 function StatCard({ title, value, icon, color, bg }: { title: string, value: string | number, icon: React.ReactNode, color: string, bg: string }) {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-slate-500">{title}</p>
-        <p className="text-3xl font-display font-semibold text-slate-900 mt-1">{value}</p>
+    <div className="bg-white p-3.5 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between gap-2 overflow-hidden">
+      <div className="min-w-0">
+        <p className="text-[11px] sm:text-xs md:text-sm font-medium text-slate-500 truncate">{title}</p>
+        <p className="text-lg sm:text-2xl md:text-3xl font-display font-semibold text-slate-900 mt-0.5 sm:mt-1 truncate">{value}</p>
       </div>
-      <div className={`${bg} ${color} w-12 h-12 rounded-full flex items-center justify-center`}>
+      <div className={`${bg} ${color} w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shrink-0`}>
         {icon}
       </div>
     </div>

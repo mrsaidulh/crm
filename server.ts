@@ -153,6 +153,21 @@ app.get('/api/leads', async (req, res) => {
 // POST /api/leads
 app.post('/api/leads', async (req, res) => {
   try {
+    const { name, email, phone, targetCourse, targetBand, destination } = req.body;
+    
+    // Strict backend validation safety guards
+    const missing: string[] = [];
+    if (!name || !name.trim()) missing.push('Full Name');
+    if (!email || !email.trim()) missing.push('Email Address');
+    if (!phone || !phone.trim()) missing.push('Phone Number');
+    if (!targetCourse || !targetCourse.trim()) missing.push('Target Course');
+    if (!targetBand || !targetBand.toString().trim()) missing.push('Target Band');
+    if (!destination || !destination.trim()) missing.push('Target Country');
+
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `Please fill in all required fields: ${missing.join(', ')}` });
+    }
+
     const newLead = {
       id: uuidv4(),
       ...req.body,

@@ -13,10 +13,8 @@ export default function FormsView() {
   const [campaignCourse, setCampaignCourse] = useState('');
   const [campaignTags, setCampaignTags] = useState('');
 
-  // Custom Domain State - Defaults to window.location.origin or suggests their host
-  const initialOrigin = window.location.origin.includes('run.app') || window.location.origin.includes('localhost')
-    ? 'https://crm.ieltsrevolution.com'
-    : window.location.origin;
+  // Custom Domain State - Defaults to window.location.origin which is the active hosted environment
+  const initialOrigin = window.location.origin;
 
   const [customDomain, setCustomDomain] = useState(initialOrigin);
 
@@ -144,11 +142,11 @@ export default function FormsView() {
           </div>
           <button 
             type="button"
-            onClick={() => setCustomDomain('https://crm.ieltsrevolution.com')}
+            onClick={() => setCustomDomain(window.location.origin)}
             className="text-[10px] bg-white border border-slate-200 hover:bg-slate-50 text-indigo-600 px-2 py-1 rounded font-medium shrink-0 transition-colors"
-            title="Set to https://crm.ieltsrevolution.com"
+            title={`Set to ${window.location.origin}`}
           >
-            Reset to Hub
+            Reset to Host
           </button>
         </div>
       </div>

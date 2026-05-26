@@ -17,6 +17,24 @@ const sanitizeInput = (val: string): string => {
     .replace(/\//g, '&#x2F;');
 };
 
+const COUNTRY_CODES: Record<string, string> = {
+  'BD': '+880',
+  'US': '+1',
+  'CA': '+1',
+  'GB': '+44',
+  'AU': '+61',
+  'NZ': '+64',
+  'IE': '+353',
+  'DE': '+49',
+  'IN': '+91',
+  'PK': '+92',
+  'SG': '+65',
+  'MY': '+60',
+  'AE': '+971',
+  'SA': '+966',
+  'QA': '+974'
+};
+
 export default function PublicForm() {
   const [userId, setUserId] = useState<string | null>(null);
   
@@ -119,6 +137,60 @@ export default function PublicForm() {
     }
   }, []);
 
+  // Set automatic country code based on browser IP address on mount
+  useEffect(() => {
+    const detectCountryCallingCode = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.country_calling_code) {
+            const code = data.country_calling_code;
+            setFormData(prev => {
+              if (!prev.phone || prev.phone === '') {
+                return { ...prev, phone: code };
+              }
+              return prev;
+            });
+            return;
+          }
+        }
+      } catch (e1) {
+        console.warn('First GeoIP attempt failed, trying fallback...', e1);
+      }
+
+      try {
+        const res = await fetch('https://ip-api.com/json');
+        if (res.ok) {
+          const data = await res.json();
+          const country = data.countryCode;
+          if (country && COUNTRY_CODES[country]) {
+            const code = COUNTRY_CODES[country];
+            setFormData(prev => {
+              if (!prev.phone || prev.phone === '') {
+                return { ...prev, phone: code };
+              }
+              return prev;
+            });
+            return;
+          }
+        }
+      } catch (e2) {
+        console.warn('Second GeoIP attempt failed:', e2);
+      }
+
+      // Default fallback
+      setFormData(prev => {
+        if (!prev.phone || prev.phone === '') {
+          return { ...prev, phone: '+880' };
+        }
+        return prev;
+      });
+    };
+
+    detectCountryCallingCode();
+  }, []);
+
   // Handle OTP countdown timer for rate limiting and client-side throttle
   useEffect(() => {
     if (countdown <= 0) return;
@@ -173,15 +245,29 @@ export default function PublicForm() {
       case 'phone': {
         // Strip spaces and dashes before performing regex validation
         const cleaned = value.replace(/[\s-]/g, '');
-        if (!cleaned) {
+        if (!cleaned || cleaned === '+' || cleaned === '+880') {
           return "Phone number is required for OTP verification";
         }
-        if (cleaned.length !== 11) {
-          return "Phone number must be 11 digits";
+        // If international format (+...)
+        if (cleaned.startsWith('+')) {
+          if (!/^\+\d{7,15}$/.test(cleaned)) {
+            return "Please enter a valid international phone number (e.g., +8801711223344)";
+          }
+          return "";
         }
-        // Starts with 01, second-index in 3-9, followed by 8 digits
-        if (!/^01[3-9]\d{8}$/.test(cleaned)) {
-          return "Please enter a valid Bangladeshi mobile number (e.g., 01711223344)";
+        // If Bangladeshi format starting with 01
+        if (cleaned.startsWith('01')) {
+          if (cleaned.length !== 11) {
+            return "Bangladeshi phone number must be 11 digits";
+          }
+          if (!/^01[3-9]\d{8}$/.test(cleaned)) {
+            return "Please enter a valid Bangladeshi mobile number (e.g., 01711223344)";
+          }
+          return "";
+        }
+        // Fallback checks
+        if (!/^\d{7,15}$/.test(cleaned)) {
+          return "Phone number must contain between 7 to 15 digits";
         }
         return "";
       }
@@ -232,8 +318,8 @@ export default function PublicForm() {
   // Handle key input change safely while auto-filtering characters for specific fields
   const handleInputChange = (field: keyof typeof formData, value: string) => {
     if (field === 'phone') {
-      // Auto-format phone as user types: only allow digits, hyphens, and spaces
-      const formattedInput = value.replace(/[^0-9\s-]/g, '');
+      // Auto-format phone as user types: only allow digits, hyphens, spaces, and plus signs
+      const formattedInput = value.replace(/[^0-9\s+-]/g, '');
       setFormData(prev => ({ ...prev, phone: formattedInput }));
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
@@ -279,6 +365,9 @@ export default function PublicForm() {
   // Retrieve clean, sanitized JSON representation of form data
   const getSanitizedData = () => {
     let rawPhone = formData.phone.replace(/[\s-]/g, '');
+    if (rawPhone.startsWith('+')) {
+      rawPhone = rawPhone.substring(1);
+    }
     if (rawPhone.startsWith('01') && rawPhone.length === 11) {
       rawPhone = '88' + rawPhone;
     } else if (rawPhone.startsWith('1') && rawPhone.length === 10) {
@@ -309,8 +398,29 @@ export default function PublicForm() {
       destination: true
     });
 
+    const missingFields: string[] = [];
+    if (!formData.name.trim()) missingFields.push('Full Name');
+    if (!formData.email.trim()) missingFields.push('Email Address');
+    if (!formData.phone.replace(/[\s-]/g, '')) missingFields.push('Phone Number');
+    if (!formData.targetCourse) missingFields.push('Target Course');
+    if (!formData.targetBand.trim()) missingFields.push('Target Band');
+    if (!formData.destination) missingFields.push('Target Country');
+
+    if (missingFields.length > 0) {
+      setValidationError(`Required fields have not been set: ${missingFields.join(', ')}. Please fill in these details.`);
+      return;
+    }
+
     if (!isFormValid) {
-      setValidationError('Please resolve form validation parameters before submitting inquiry.');
+      const errList: string[] = [];
+      if (errors.name) errList.push(`• Full Name (${errors.name})`);
+      if (errors.email) errList.push(`• Email (${errors.email})`);
+      if (errors.phone) errList.push(`• Phone (${errors.phone})`);
+      if (errors.targetCourse) errList.push(`• Course (${errors.targetCourse})`);
+      if (errors.targetBand) errList.push(`• Band score (${errors.targetBand})`);
+      if (errors.destination) errList.push(`• Country (${errors.destination})`);
+
+      setValidationError(`Please resolve form validation parameters:\n${errList.join('\n')}`);
       return;
     }
 
@@ -530,7 +640,7 @@ export default function PublicForm() {
             </div>
 
             {validationError && (
-              <div role="alert" className="p-3.5 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2.5 text-xs text-red-700 font-medium">
+              <div role="alert" className="p-3.5 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2.5 text-xs text-red-700 font-medium whitespace-pre-line">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
                 <span>{validationError}</span>
               </div>
@@ -545,6 +655,7 @@ export default function PublicForm() {
                 <input 
                   id="name"
                   type="text" 
+                  required
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   onBlur={() => handleBlur('name')}
@@ -580,6 +691,7 @@ export default function PublicForm() {
                 <input 
                   id="email"
                   type="email" 
+                  required
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   onBlur={() => handleBlur('email')}
@@ -618,13 +730,14 @@ export default function PublicForm() {
                 <input 
                   id="phone"
                   type="tel" 
+                  required
                   value={formData.phone}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
                   onBlur={() => handleBlur('phone')}
                   aria-invalid={touched.phone && !!errors.phone ? 'true' : 'false'}
                   aria-describedby={touched.phone && errors.phone ? 'phone-error' : undefined}
                   className={`${getInputStyles('phone')} pl-10`}
-                  placeholder="01711223344"
+                  placeholder="e.g. +8801711223344"
                 />
                 {touched.phone && (
                   <div className="absolute right-3 top-3 flex items-center pointer-events-none">
@@ -653,6 +766,7 @@ export default function PublicForm() {
                 <div className="relative">
                   <select
                     id="targetCourse"
+                    required
                     value={formData.targetCourse}
                     onChange={(e) => handleInputChange('targetCourse', e.target.value)}
                     onBlur={() => handleBlur('targetCourse')}
@@ -686,6 +800,7 @@ export default function PublicForm() {
                     step="0.5"
                     min="6"
                     max="9"
+                    required
                     value={formData.targetBand}
                     onChange={(e) => handleInputChange('targetBand', e.target.value)}
                     onBlur={() => handleBlur('targetBand')}
@@ -724,6 +839,7 @@ export default function PublicForm() {
                 </div>
                 <select
                   id="destination"
+                  required
                   value={formData.destination}
                   onChange={(e) => handleInputChange('destination', e.target.value)}
                   onBlur={() => handleBlur('destination')}

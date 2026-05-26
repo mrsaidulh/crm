@@ -863,7 +863,7 @@ export default function LeadsView() {
           <h1 className="text-2xl font-display font-semibold text-slate-900">Leads Management</h1>
           <p className="text-slate-500 text-sm mt-1">Manage inquiries from all ad sources and forms.</p>
         </div>
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button 
             onClick={handleExportCSV}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
@@ -1282,8 +1282,8 @@ export default function LeadsView() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={closeModal}></div>
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
               <h2 className="text-lg font-semibold text-slate-900">
                 {editingLeadId ? 'Edit Lead' : 'Add New Lead'}
               </h2>
@@ -1292,7 +1292,7 @@ export default function LeadsView() {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
                 <input 

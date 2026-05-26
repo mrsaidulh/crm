@@ -196,8 +196,8 @@ export default function CustomersView() {
       {managingScoresForId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setManagingScoresForId(null)}></div>
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
               <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <Calculator className="w-5 h-5 text-indigo-600" /> Log Mock Score
               </h2>
@@ -206,7 +206,7 @@ export default function CustomersView() {
               </button>
             </div>
             
-            <form onSubmit={handleScoreSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleScoreSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Listening</label>
