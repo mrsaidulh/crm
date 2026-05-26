@@ -12,9 +12,9 @@ export default function WorkflowsView() {
 
   const [formData, setFormData] = useState<{
     name: string;
-    triggerEvent: 'Lead Created' | 'Lead Status Changed';
+    triggerEvent: 'Lead Created' | 'Lead Status Changed' | 'Keywords Match';
     triggerCondition: string;
-    actionType: 'Send SMS' | 'Send Email' | 'Create Task' | 'Trigger n8n Webhook';
+    actionType: 'Send SMS' | 'Send Email' | 'Create Task' | 'Trigger n8n Webhook' | 'Add Tags';
     actionTemplateId: string;
     taskTitle: string;
     n8nWebhookUrl: string;
@@ -93,7 +93,9 @@ export default function WorkflowsView() {
         actionType: formData.actionType,
         isActive: true,
         ...(formData.triggerEvent === 'Lead Status Changed' ? { triggerCondition: formData.triggerCondition || 'New' } : {}),
+        ...(formData.triggerEvent === 'Keywords Match' ? { triggerCondition: formData.triggerCondition || '' } : {}),
         ...(formData.actionType === 'Create Task' ? { taskTitle: formData.taskTitle } : {}),
+        ...(formData.actionType === 'Add Tags' ? { taskTitle: formData.taskTitle } : {}),
         ...(formData.actionType === 'Trigger n8n Webhook' ? { n8nWebhookUrl: formData.n8nWebhookUrl } : {}),
         ...((formData.actionType === 'Send SMS' || formData.actionType === 'Send Email') ? { actionTemplateId: formData.actionTemplateId } : {}),
       };
@@ -196,11 +198,16 @@ export default function WorkflowsView() {
             <div className="space-y-3 mt-4 text-sm">
               <div className="flex flex-col gap-1">
                 <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">When</span>
-                <span className="font-medium text-slate-900">
-                  {workflow.triggerEvent}
+                <span className="font-medium text-slate-900 flex flex-wrap gap-2 items-center">
+                  {workflow.triggerEvent === 'Keywords Match' ? 'Lead Note/Email contains' : workflow.triggerEvent}
                   {workflow.triggerEvent === 'Lead Status Changed' && (
-                    <span className="text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded text-xs ml-2 border border-indigo-100">
+                    <span className="text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded text-xs border border-indigo-100">
                       is {workflow.triggerCondition}
+                    </span>
+                  )}
+                  {workflow.triggerEvent === 'Keywords Match' && (
+                    <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded text-xs border border-amber-100 italic" title={workflow.triggerCondition}>
+                      "{workflow.triggerCondition}"
                     </span>
                   )}
                 </span>
@@ -208,9 +215,13 @@ export default function WorkflowsView() {
               <div className="flex flex-col gap-1">
                 <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Then</span>
                 <span className="font-medium text-slate-900 flex flex-wrap gap-2 items-center">
-                  {workflow.actionType}
+                  {workflow.actionType === 'Add Tags' ? 'Add Tags:' : workflow.actionType}
                   {workflow.actionType === 'Create Task' ? (
                     <span className="text-slate-600 text-xs italic">"{workflow.taskTitle}"</span>
+                  ) : workflow.actionType === 'Add Tags' ? (
+                    <span className="text-emerald-700 text-xs font-semibold bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
+                      "{workflow.taskTitle}"
+                    </span>
                   ) : workflow.actionType === 'Trigger n8n Webhook' ? (
                     <span className="text-emerald-700 text-xs font-mono max-w-[200px] truncate bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg" title={workflow.n8nWebhookUrl}>
                       {workflow.n8nWebhookUrl}
@@ -278,11 +289,20 @@ export default function WorkflowsView() {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">This event happens</label>
                   <select 
                     value={formData.triggerEvent} 
-                    onChange={e => setFormData({...formData, triggerEvent: e.target.value as any})} 
+                    onChange={e => {
+                      const val = e.target.value as any;
+                      setFormData(prev => ({
+                        ...prev,
+                        triggerEvent: val,
+                        actionType: val === 'Keywords Match' ? 'Add Tags' : (prev.actionType === 'Add Tags' ? 'Send Email' : prev.actionType),
+                        triggerCondition: val === 'Keywords Match' ? prev.triggerCondition || '' : ''
+                      }));
+                    }} 
                     className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                   >
                     <option value="Lead Created">A New Lead is Created</option>
                     <option value="Lead Status Changed">Lead Status Changes</option>
+                    <option value="Keywords Match">Lead Note or Email Contains Keywords</option>
                   </select>
                 </div>
                 {formData.triggerEvent === 'Lead Status Changed' && (
@@ -297,6 +317,19 @@ export default function WorkflowsView() {
                       <option value="">Select status...</option>
                       {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                  </div>
+                )}
+                {formData.triggerEvent === 'Keywords Match' && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Keywords to Match <span className="text-[11px] font-normal text-slate-400">(comma-separated)</span></label>
+                    <input 
+                      type="text"
+                      required 
+                      value={formData.triggerCondition} 
+                      onChange={e => setFormData({...formData, triggerCondition: e.target.value})} 
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                      placeholder="e.g. visa, scholarship, urgent, direct"
+                    />
                   </div>
                 )}
               </div>
@@ -316,6 +349,7 @@ export default function WorkflowsView() {
                     <option value="Send SMS">Send SMS</option>
                     <option value="Create Task">Create Follow-up Task</option>
                     <option value="Trigger n8n Webhook">Trigger n8n Webhook</option>
+                    <option value="Add Tags">Add Tags to Lead</option>
                   </select>
                 </div>
                 
@@ -330,6 +364,18 @@ export default function WorkflowsView() {
                         onChange={e => setFormData({...formData, taskTitle: e.target.value})} 
                         className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm" 
                         placeholder="e.g. Call this lead ASAP" 
+                      />
+                    </div>
+                  ) : formData.actionType === 'Add Tags' ? (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tags to add <span className="text-[11px] font-normal text-slate-400">(comma-separated)</span></label>
+                      <input 
+                        type="text" 
+                        required 
+                        value={formData.taskTitle} 
+                        onChange={e => setFormData({...formData, taskTitle: e.target.value})} 
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm" 
+                        placeholder="e.g. visa-priority, scholarship" 
                       />
                     </div>
                   ) : formData.actionType === 'Trigger n8n Webhook' ? (

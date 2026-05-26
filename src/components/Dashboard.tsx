@@ -1,18 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { format, subDays, isSameDay } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, Stats } from '../types';
 import { Server, WifiOff, AlertTriangle, RefreshCw, Key, HelpCircle } from 'lucide-react';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config?: any; error?: string } | null>(null);
   const [checkingDb, setCheckingDb] = useState(false);
+
+  // Date Range Picker States
+  const [dateRangeOption, setDateRangeOption] = useState<string>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>(
+    format(subDays(new Date(), 30), 'yyyy-MM-dd')
+  );
+  const [customEndDate, setCustomEndDate] = useState<string>(
+    format(new Date(), 'yyyy-MM-dd')
+  );
 
   const { user } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
@@ -55,38 +63,7 @@ export default function Dashboard() {
       })
       .then(data => {
         if (data && data.leads) {
-          const fbLeads = data.leads;
-          setLeads(fbLeads);
-          
-          const totalLeads = fbLeads.length;
-          const newLeads = fbLeads.filter((l: Lead) => l.status === 'New').length;
-          const enrolled = fbLeads.filter((l: Lead) => l.status === 'Enrolled').length;
-          
-          let estimatedPipelineValue = 0;
-          let conversionValue = 0;
-          fbLeads.forEach((l: Lead) => {
-            if (l.status !== 'Discarded' && l.expectedValue) {
-              estimatedPipelineValue += Number(l.expectedValue);
-            }
-            if (l.status === 'Enrolled' && l.expectedValue) {
-              conversionValue += Number(l.expectedValue);
-            }
-          });
-          
-          const bySource = fbLeads.reduce((acc: any, lead: Lead) => {
-            acc[lead.source] = (acc[lead.source] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-
-          setStats({
-            totalLeads,
-            newLeads,
-            enrolled,
-            conversionRate: totalLeads > 0 ? parseFloat(((enrolled / totalLeads) * 100).toFixed(1)) : 0,
-            bySource,
-            estimatedPipelineValue,
-            conversionValue
-          });
+          setLeads(data.leads);
         }
       })
       .catch(err => {
@@ -102,6 +79,88 @@ export default function Dashboard() {
     loadDashboardData();
     checkDbStatus();
   }, [userId]);
+
+  // Filter leads dynamically based on selected date range option
+  const filteredLeads = useMemo(() => {
+    if (!leads || leads.length === 0) return [];
+
+    const now = new Date();
+    let start: Date | null = null;
+    let end: Date | null = null;
+
+    if (dateRangeOption === '7days') {
+      start = subDays(now, 7);
+      start.setHours(0, 0, 0, 0);
+    } else if (dateRangeOption === '30days') {
+      start = subDays(now, 30);
+      start.setHours(0, 0, 0, 0);
+    } else if (dateRangeOption === '90days') {
+      start = subDays(now, 90);
+      start.setHours(0, 0, 0, 0);
+    } else if (dateRangeOption === 'custom') {
+      if (customStartDate) {
+        start = new Date(customStartDate);
+        start.setHours(0, 0, 0, 0);
+      }
+      if (customEndDate) {
+        end = new Date(customEndDate);
+        end.setHours(23, 59, 59, 999);
+      }
+    }
+
+    return leads.filter(lead => {
+      if (!lead.createdAt) return false;
+      const leadDate = new Date(lead.createdAt);
+      if (start && leadDate < start) return false;
+      if (end && leadDate > end) return false;
+      return true;
+    });
+  }, [leads, dateRangeOption, customStartDate, customEndDate]);
+
+  // Compute analytics dynamically from active filtered leads
+  const stats = useMemo(() => {
+    if (!filteredLeads) {
+      return {
+        totalLeads: 0,
+        newLeads: 0,
+        enrolled: 0,
+        conversionRate: 0,
+        bySource: {} as Record<string, number>,
+        estimatedPipelineValue: 0,
+        conversionValue: 0
+      };
+    }
+
+    const totalLeads = filteredLeads.length;
+    const newLeads = filteredLeads.filter((l: Lead) => l.status === 'New').length;
+    const enrolled = filteredLeads.filter((l: Lead) => l.status === 'Enrolled').length;
+
+    let estimatedPipelineValue = 0;
+    let conversionValue = 0;
+    filteredLeads.forEach((l: Lead) => {
+      if (l.status !== 'Discarded' && l.expectedValue) {
+        estimatedPipelineValue += Number(l.expectedValue);
+      }
+      if (l.status === 'Enrolled' && l.expectedValue) {
+        conversionValue += Number(l.expectedValue);
+      }
+    });
+
+    const bySource = filteredLeads.reduce((acc: any, lead: Lead) => {
+      acc[lead.source] = (acc[lead.source] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      totalLeads,
+      newLeads,
+      enrolled,
+      conversionRate: totalLeads > 0 ? parseFloat(((enrolled / totalLeads) * 100).toFixed(1)) : 0,
+      bySource,
+      estimatedPipelineValue,
+      conversionValue
+    };
+  }, [filteredLeads]);
 
   if (loading) {
     return (
@@ -219,33 +278,105 @@ export default function Dashboard() {
     value: stats.bySource[key]
   }));
 
-  // Calculate dynamic daily trend data for the last 7 days
-  const today = new Date();
-  const trendData = Array.from({ length: 7 }, (_, i) => {
-    const d = subDays(today, 6 - i);
-    const dayLabel = format(d, 'EEE d/M');
-    
-    // Find count of leads created on this specific day
-    const count = leads.filter(lead => {
-      if (!lead.createdAt) return false;
-      const leadDate = new Date(lead.createdAt);
-      return isSameDay(leadDate, d);
-    }).length;
+  // Calculate dynamic trend data adapted to selected range
+  const trendData = (() => {
+    let daysToRender = 7;
+    const today = new Date();
+    let startDate = subDays(today, 6);
 
-    return {
-      name: dayLabel,
-      leads: count
-    };
-  });
+    if (dateRangeOption === '30days') {
+      daysToRender = 30;
+      startDate = subDays(today, 29);
+    } else if (dateRangeOption === '90days') {
+      daysToRender = 90;
+      startDate = subDays(today, 89);
+    } else if (dateRangeOption === 'custom' && customStartDate && customEndDate) {
+      const s = new Date(customStartDate);
+      const e = new Date(customEndDate);
+      const diffTime = Math.abs(e.getTime() - s.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      // Cap at 120 days to ensure performance stays premium
+      daysToRender = Math.min(diffDays, 120);
+      startDate = s;
+    } else if (dateRangeOption === 'all') {
+      if (leads.length > 0) {
+        const oldestLead = [...leads].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+        const oldestDate = oldestLead.createdAt ? new Date(oldestLead.createdAt) : subDays(today, 29);
+        const diffTime = Math.abs(today.getTime() - oldestDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        daysToRender = Math.min(diffDays, 120);
+        startDate = oldestDate;
+      } else {
+        daysToRender = 30;
+        startDate = subDays(today, 29);
+      }
+    }
+
+    return Array.from({ length: daysToRender }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const dayLabel = format(d, daysToRender > 31 ? 'd/M' : 'EEE d/M');
+
+      const count = leads.filter(lead => {
+        if (!lead.createdAt) return false;
+        const leadDate = new Date(lead.createdAt);
+        return isSameDay(leadDate, d);
+      }).length;
+
+      return {
+        name: dayLabel,
+        leads: count
+      };
+    });
+  })();
 
   const COLORS = ['#11347a', '#10b981', '#f59e0b', '#e31837', '#8b5cf6', '#0ea5e9', '#64748b'];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-display font-semibold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-1">Overview of your IELTS Revolution CRM</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-semibold text-slate-900">Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-1">Overview of your IELTS Revolution CRM</p>
+        </div>
+
+        {/* Date Range Picker Component */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+            <Calendar className="w-4 h-4 text-slate-400 mr-2" />
+            <select
+              value={dateRangeOption}
+              onChange={(e) => setDateRangeOption(e.target.value)}
+              className="text-xs font-semibold text-slate-700 bg-transparent focus:outline-none cursor-pointer p-0 border-none"
+            >
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="all">All Time</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          {dateRangeOption === 'custom' && (
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs text-xs font-semibold text-slate-600 animate-in slide-in-from-right-2 duration-200">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="focus:outline-none bg-transparent hover:text-indigo-600 cursor-pointer text-[11px]"
+              />
+              <span className="text-slate-300 mx-1">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="focus:outline-none bg-transparent hover:text-indigo-600 cursor-pointer text-[11px]"
+              />
+            </div>
+          )}
+        </div>
       </div>
+
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard title="Total Leads" value={stats.totalLeads} icon={<Users className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Smartphone, KeyRound, Loader2, Lock, RefreshCw, GraduationCap, Globe } from 'lucide-react';
 import type { LeadSource, LeadStatus } from '../types';
-import { triggerGlobalWebhook, triggerWorkflowAutomations } from '../utils/automation';
+import { triggerGlobalWebhook, triggerWorkflowAutomations, evaluateKeywordsTrigger } from '../utils/automation';
 
 /**
  * Utility to sanitize dynamic user input in client-side to prevent Cross-Site Scripting (XSS)
@@ -197,11 +197,11 @@ export default function PublicForm() {
           return "Target band is required";
         }
         const num = parseFloat(trimmed);
-        if (isNaN(num) || num < 4.0 || num > 9.0) {
-          return "Band score must be between 4.0 and 9.0";
+        if (isNaN(num) || num < 6.0 || num > 9.0) {
+          return "Band score must be between 6.0 and 9.0";
         }
         // Force valid 0.5 increments using regex patterns
-        if (!/^([4-8](\.[05])?|9(\.0)?)$/.test(trimmed)) {
+        if (!/^([6-8](\.[05])?|9(\.0)?)$/.test(trimmed)) {
           return "Band score must be in 0.5 increments (e.g., 6.0, 6.5, 7.0)";
         }
         return "";
@@ -404,9 +404,13 @@ export default function PublicForm() {
         setStatus('success');
         showToast('success', 'Thank you! Appointment requested and phone number validated.');
         const createdLead = respData.lead;
+        
+        // Evaluate keywords trigger and apply tags
+        const finalizedLead = await evaluateKeywordsTrigger(userId, createdLead);
+        
         // Trigger automatic webhooks and CRM workflows
-        triggerGlobalWebhook(userId, 'Lead Created', createdLead);
-        triggerWorkflowAutomations(userId, 'Lead Created', 'New', createdLead);
+        triggerGlobalWebhook(userId, 'Lead Created', finalizedLead);
+        triggerWorkflowAutomations(userId, 'Lead Created', 'New', finalizedLead);
       } else {
         setValidationError(respData.error || 'Database storage error. Please retry submission process.');
         setStatus('idle');
@@ -680,7 +684,7 @@ export default function PublicForm() {
                     id="targetBand"
                     type="number"
                     step="0.5"
-                    min="4"
+                    min="6"
                     max="9"
                     value={formData.targetBand}
                     onChange={(e) => handleInputChange('targetBand', e.target.value)}

@@ -132,3 +132,78 @@ export async function triggerWorkflowAutomations(
   }
 }
 
+/**
+ * Evaluates active 'Keywords Match' workflow rules for a lead and automatically updates tags if needed.
+ */
+export async function evaluateKeywordsTrigger(userId: string, lead: any): Promise<any> {
+  if (!userId || !lead) return lead;
+  try {
+    const response = await fetch(`/api/workflows?userId=${encodeURIComponent(userId)}`);
+    if (!response.ok) return lead;
+
+    const resData = await response.json();
+    const workflowsData = resData.workflows as WorkflowRule[];
+    if (!workflowsData || !Array.isArray(workflowsData)) return lead;
+
+    // Filter active 'Keywords Match' rules
+    const activeRules = workflowsData.filter(
+      w => w.isActive && w.triggerEvent === 'Keywords Match'
+    );
+
+    if (activeRules.length === 0) return lead;
+
+    const notes = lead.notes || '';
+    const email = lead.email || '';
+    
+    let tagsToSet = Array.isArray(lead.tags) ? [...lead.tags] : [];
+    let hasChanges = false;
+
+    // Helper to see if any keyword exists in a text
+    const checkMatch = (text: string, keywordsCsv: string): boolean => {
+      if (!text || !keywordsCsv) return false;
+      const keywords = keywordsCsv.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      const textLower = text.toLowerCase();
+      return keywords.some(kw => textLower.includes(kw));
+    };
+
+    for (const rule of activeRules) {
+      if (!rule.triggerCondition) continue;
+      
+      const isMatch = checkMatch(notes, rule.triggerCondition) || checkMatch(email, rule.triggerCondition);
+
+      if (isMatch) {
+        // Tag to add from rule (stored in taskTitle/task_title)
+        const tagsToAdd = (rule.taskTitle || '').split(',').map(t => t.trim()).filter(Boolean);
+        const originalLength = tagsToSet.length;
+        
+        // Merge and uniquely filter
+        tagsToSet = Array.from(new Set([...tagsToSet, ...tagsToAdd]));
+        
+        if (tagsToSet.length > originalLength) {
+          hasChanges = true;
+          console.log(`Keywords Match rule "${rule.name}" triggered. Adding tags: ${tagsToAdd.join(', ')}`);
+        }
+      }
+    }
+
+    if (hasChanges) {
+      // Promptly save the new tags to the lead
+      const updateResponse = await fetch(`/api/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tags: tagsToSet })
+      });
+      if (updateResponse.ok) {
+        const updateData = await updateResponse.json();
+        return updateData.lead;
+      }
+    }
+  } catch (error) {
+    console.error('Error evaluating keywords trigger:', error);
+  }
+  return lead;
+}
+
+

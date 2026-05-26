@@ -121,9 +121,9 @@ export interface UserSettings {
 export interface WorkflowRule {
   id: string;
   name: string;
-  triggerEvent: 'Lead Created' | 'Lead Status Changed';
-  triggerCondition?: string; // For "Lead Status Changed"
-  actionType: 'Send SMS' | 'Send Email' | 'Create Task' | 'Trigger n8n Webhook';
+  triggerEvent: 'Lead Created' | 'Lead Status Changed' | 'Keywords Match';
+  triggerCondition?: string; // For "Lead Status Changed" or "Keywords Match"
+  actionType: 'Send SMS' | 'Send Email' | 'Create Task' | 'Trigger n8n Webhook' | 'Add Tags';
   actionTemplateId?: string;
   taskTitle?: string;
   n8nWebhookUrl?: string;

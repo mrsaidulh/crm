@@ -181,10 +181,10 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r border-slate-200 shadow-sm z-50 flex flex-col transition-transform duration-300 ease-in-out ${
+      <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r border-slate-200 shadow-sm z-50 flex flex-col h-screen md:h-auto lg:h-screen transition-transform duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
-        <div className="p-6 flex items-center justify-between">
+        <div className="p-6 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-600 p-2 rounded-xl">
               <GraduationCap className="w-6 h-6 text-white" />
@@ -202,54 +202,72 @@ export default function App() {
           </button>
         </div>
 
-        <div className="px-6 pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-4">
-          Overview
-        </div>
-        <nav className="flex-1 px-4 space-y-1">
-          <NavItem view="dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard Insights" />
-        </nav>
+        {/* Scrollable Navigation Body */}
+        <div className="flex-1 overflow-y-auto py-4 space-y-6">
+          <div>
+            <div className="px-6 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Overview
+            </div>
+            <nav className="px-4 space-y-1">
+              <NavItem view="dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard Insights" />
+            </nav>
+          </div>
 
-        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          Sales Team
-        </div>
-        <nav className="flex-1 px-4 space-y-1">
-          <NavItem view="funnel" icon={<KanbanSquare className="w-5 h-5" />} label="Pipeline Funnel" />
-          <NavItem view="leads" icon={<Users className="w-5 h-5" />} label="Leads Data" />
-          <NavItem view="customers" icon={<Star className="w-5 h-5" />} label="Student Management" />
-          <NavItem view="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks & Follow-ups" />
-        </nav>
+          <div>
+            <div className="px-6 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Sales Team
+            </div>
+            <nav className="px-4 space-y-1">
+              <NavItem view="funnel" icon={<KanbanSquare className="w-5 h-5" />} label="Pipeline Funnel" />
+              <NavItem view="leads" icon={<Users className="w-5 h-5" />} label="Leads Data" />
+              <NavItem view="customers" icon={<Star className="w-5 h-5" />} label="Student Management" />
+              <NavItem view="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks & Follow-ups" />
+            </nav>
+          </div>
 
-        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          Marketing & Automation
-        </div>
-        <nav className="flex-1 px-4 space-y-1">
-          <NavItem view="campaigns" icon={<MessageSquare className="w-5 h-5" />} label="Broadcast Campaigns" />
-          <NavItem view="templates" icon={<FileText className="w-5 h-5" />} label="Message Templates" />
-          <NavItem view="forms" icon={<FormInput className="w-5 h-5" />} label="Web Forms" />
-          <NavItem view="workflows" icon={<Zap className="w-5 h-5" />} label="Workflows" />
-        </nav>
+          <div>
+            <div className="px-6 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Marketing & Automation
+            </div>
+            <nav className="px-4 space-y-1">
+              <NavItem view="campaigns" icon={<MessageSquare className="w-5 h-5" />} label="Broadcast Campaigns" />
+              <NavItem view="templates" icon={<FileText className="w-5 h-5" />} label="Message Templates" />
+              <NavItem view="forms" icon={<FormInput className="w-5 h-5" />} label="Web Forms" />
+              <NavItem view="workflows" icon={<Zap className="w-5 h-5" />} label="Workflows" />
+            </nav>
+          </div>
 
-        <div className="px-6 pb-3 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          Security & Admin
+          <div>
+            <div className="px-6 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Security & Admin
+            </div>
+            <nav className="px-4 space-y-1">
+              <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" />
+            </nav>
+          </div>
         </div>
-        <nav className="px-4 space-y-1">
-          <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" />
-        </nav>
 
-        <div className="p-4 border-t border-slate-100 mt-6">
+        {/* Footer Container - Settings and Profile (stays at bottom but won't clip) */}
+        <div className="p-4 border-t border-slate-100 flex-shrink-0 bg-slate-50/50">
            <nav className="space-y-1">
              <NavItem view="settings" icon={<Settings className="w-5 h-5" />} label="Settings" />
            </nav>
            
-           <div className="mt-6 flex items-center gap-3 px-4 py-2">
-             <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm uppercase">
+           <div className="mt-4 flex items-center gap-3 px-4 py-2 border-t border-slate-100/60 pt-4">
+             <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm uppercase flex-shrink-0">
                {user?.email?.[0] || 'A'}
              </div>
              <div className="flex-1 min-w-0">
                <p className="text-sm font-medium text-slate-900 truncate">{user?.displayName || 'CRM Admin'}</p>
                <p className="text-xs text-slate-500 truncate">{user?.email}</p>
              </div>
-             <LogOut onClick={logOut} className="w-4 h-4 text-slate-400 cursor-pointer hover:text-red-500 transition-colors" />
+             <button 
+               onClick={logOut} 
+               className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-all"
+               title="Sign Out"
+             >
+               <LogOut className="w-4 h-4 cursor-pointer" />
+             </button>
            </div>
         </div>
       </aside>

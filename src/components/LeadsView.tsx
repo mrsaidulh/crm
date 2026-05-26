@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, LeadStatus, LeadSource } from '../types';
 import { calculateLeadScore } from '../utils/scoring';
-import { triggerGlobalWebhook, triggerWorkflowAutomations } from '../utils/automation';
+import { triggerGlobalWebhook, triggerWorkflowAutomations, evaluateKeywordsTrigger } from '../utils/automation';
 import { logAuditEvent } from '../utils/auditLogger';
 
 
@@ -17,8 +17,21 @@ export default function LeadsView() {
   const [countryFilter, setCountryFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('createdAt-desc');
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Tag Manager States
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [newTagName, setNewTagName] = useState('');
+  
+  // Bulk Tag Input States
+  const [bulkTagToAdd, setBulkTagToAdd] = useState('');
+  const [bulkTagToRemove, setBulkTagToRemove] = useState('');
+  const [showBulkTagAdd, setShowBulkTagAdd] = useState(false);
+  const [showBulkTagRemove, setShowBulkTagRemove] = useState(false);
+
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ 
     name: '', 
@@ -118,10 +131,10 @@ export default function LeadsView() {
           return "Target band is required";
         }
         const num = parseFloat(trimmed);
-        if (isNaN(num) || num < 4.0 || num > 9.0) {
-          return "Band score must be between 4.0 and 9.0";
+        if (isNaN(num) || num < 6.0 || num > 9.0) {
+          return "Band score must be between 6.0 and 9.0";
         }
-        if (!/^([4-8](\.[05])?|9(\.0)?)$/.test(trimmed)) {
+        if (!/^([6-8](\.[05])?|9(\.0)?)$/.test(trimmed)) {
           return "Band score must be in 0.5 increments (e.g., 6.0, 6.5, 7.0)";
         }
         return "";
@@ -312,6 +325,216 @@ export default function LeadsView() {
     }
   };
 
+  // Dynamic calculation of unique tags and counts
+  const distinctTagsWithCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    leads.forEach(l => {
+      if (l.tags && Array.isArray(l.tags)) {
+        l.tags.forEach(t => {
+          const trimmed = t.trim();
+          if (trimmed) {
+            counts[trimmed] = (counts[trimmed] || 0) + 1;
+          }
+        });
+      }
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [leads]);
+
+  const handleRenameTag = async (oldName: string, newName: string) => {
+    const trimmedNew = newName.trim();
+    if (!trimmedNew || trimmedNew === oldName) return;
+
+    const leadsToUpdate = leads.filter(l => l.tags && l.tags.includes(oldName));
+    if (leadsToUpdate.length === 0) return;
+
+    setLoading(true);
+    try {
+      let updatedCount = 0;
+      const updatedLeadsList = [...leads];
+
+      for (const lead of leadsToUpdate) {
+        const updatedTags = lead.tags!.map(t => t === oldName ? trimmedNew : t);
+        const uniqueTags = Array.from(new Set(updatedTags));
+
+        const response = await fetch(`/api/leads/${lead.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: uniqueTags })
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          const savedLead = resJson.lead;
+          const idx = updatedLeadsList.findIndex(l => l.id === lead.id);
+          if (idx !== -1) {
+            updatedLeadsList[idx] = savedLead;
+          }
+          updatedCount++;
+        }
+      }
+
+      setLeads(updatedLeadsList);
+      logAuditEvent({
+        action: 'Tag Renamed Globally',
+        entityType: 'system',
+        details: `Renamed tag "${oldName}" to "${trimmedNew}" across ${updatedCount} lead(s).`
+      });
+      alert(`Successfully renamed tag on ${updatedCount} lead(s).`);
+    } catch (err) {
+      console.error('Error renaming tag:', err);
+      alert('Failed to rename tag completely.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTag = async (tagName: string) => {
+    if (!confirm(`Are you sure you want to delete the tag "${tagName}" from all leads?`)) return;
+
+    const leadsToUpdate = leads.filter(l => l.tags && l.tags.includes(tagName));
+    if (leadsToUpdate.length === 0) {
+      alert("No leads carried this tag.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let updatedCount = 0;
+      const updatedLeadsList = [...leads];
+
+      for (const lead of leadsToUpdate) {
+        const updatedTags = lead.tags!.filter(t => t !== tagName);
+        const response = await fetch(`/api/leads/${lead.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: updatedTags })
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          const savedLead = resJson.lead;
+          const idx = updatedLeadsList.findIndex(l => l.id === lead.id);
+          if (idx !== -1) {
+            updatedLeadsList[idx] = savedLead;
+          }
+          updatedCount++;
+        }
+      }
+
+      setLeads(updatedLeadsList);
+      logAuditEvent({
+        action: 'Tag Deleted Globally',
+        entityType: 'system',
+        details: `Deleted tag "${tagName}" from all ${updatedCount} lead(s).`
+      });
+      alert(`Successfully deleted tag from ${updatedCount} lead(s).`);
+    } catch (err) {
+      console.error('Error deleting tag:', err);
+      alert('Failed to delete tag.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkAddTag = async (tagToAdd: string) => {
+    const trimmed = tagToAdd.trim();
+    if (!trimmed || selectedLeadIds.length === 0) return;
+    try {
+      setLoading(true);
+      const updatedLeadsList = [...leads];
+      const promises = selectedLeadIds.map(async (id) => {
+        const lead = leads.find(l => l.id === id);
+        if (lead) {
+          const currentTags = lead.tags || [];
+          if (!currentTags.includes(trimmed)) {
+            const newTags = [...currentTags, trimmed];
+            const response = await fetch(`/api/leads/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tags: newTags })
+            });
+            if (response.ok) {
+              const resJson = await response.json();
+              const savedLead = resJson.lead;
+              const idx = updatedLeadsList.findIndex(l => l.id === id);
+              if (idx !== -1) {
+                updatedLeadsList[idx] = savedLead;
+              }
+            }
+          }
+        }
+      });
+      await Promise.all(promises);
+      setLeads(updatedLeadsList);
+
+      logAuditEvent({
+        action: 'Lead Bulk Tag Added',
+        entityType: 'lead',
+        details: `Added tag "${trimmed}" to ${selectedLeadIds.length} lead(s).`
+      });
+
+      setSelectedLeadIds([]);
+      setBulkTagToAdd('');
+      setShowBulkTagAdd(false);
+      alert(`Tag "${trimmed}" successfully added to selected leads.`);
+    } catch (e) {
+      console.error('Error bulk adding tag:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkRemoveTag = async (tagToRemove: string) => {
+    const trimmed = tagToRemove.trim();
+    if (!trimmed || selectedLeadIds.length === 0) return;
+    try {
+      setLoading(true);
+      const updatedLeadsList = [...leads];
+      const promises = selectedLeadIds.map(async (id) => {
+        const lead = leads.find(l => l.id === id);
+        if (lead) {
+          const currentTags = lead.tags || [];
+          if (currentTags.includes(trimmed)) {
+            const newTags = currentTags.filter(t => t !== trimmed);
+            const response = await fetch(`/api/leads/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tags: newTags })
+            });
+            if (response.ok) {
+              const resJson = await response.json();
+              const savedLead = resJson.lead;
+              const idx = updatedLeadsList.findIndex(l => l.id === id);
+              if (idx !== -1) {
+                updatedLeadsList[idx] = savedLead;
+              }
+            }
+          }
+        }
+      });
+      await Promise.all(promises);
+      setLeads(updatedLeadsList);
+
+      logAuditEvent({
+        action: 'Lead Bulk Tag Removed',
+        entityType: 'lead',
+        details: `Removed tag "${trimmed}" from ${selectedLeadIds.length} lead(s).`
+      });
+
+      setSelectedLeadIds([]);
+      setBulkTagToRemove('');
+      setShowBulkTagRemove(false);
+      alert(`Tag "${trimmed}" successfully removed from selected leads.`);
+    } catch (e) {
+      console.error('Error bulk removing tag:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openAddModal = () => {
     setEditingLeadId(null);
     setFormData({ 
@@ -413,6 +636,7 @@ export default function LeadsView() {
         email: formData.email.trim().toLowerCase(),
         phone: finalPhone,
         source: formData.source,
+        status: editingLeadId ? undefined : 'New', // Add status field 
         notes: formData.notes,
         targetCourse: formData.targetCourse,
         targetBand: formData.targetBand,
@@ -426,62 +650,77 @@ export default function LeadsView() {
       }
 
       if (editingLeadId) {
-        const response = await fetch(`/api/leads/${editingLeadId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(dataToSave)
-        });
-        if (response.ok) {
-          const resData = await response.json();
-          const savedLead = resData.lead;
-          setLeads(prev => prev.map(l => l.id === editingLeadId ? savedLead : l));
-          
-          // If status changed in the edit, trigger status changed events
-          const lead = leads.find(l => l.id === editingLeadId);
-          if (lead && dataToSave.status && lead.status !== dataToSave.status) {
-            const updatedLead = { ...lead, ...dataToSave };
-            triggerGlobalWebhook(userId, 'Lead Status Changed', updatedLead);
-            triggerWorkflowAutomations(userId, 'Lead Status Changed', dataToSave.status, updatedLead);
-          }
-
-          // Publish log event
-          logAuditEvent({
-            action: 'Lead Profile Updated',
-            entityType: 'lead',
-            entityId: editingLeadId,
-            details: `Lead "${dataToSave.name || lead?.name || 'Unknown'}" details updated by admin.`
-          });
-        }
-      } else {
-        const response = await fetch('/api/leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...dataToSave,
-            userId: userId
-          })
-        });
-        if (response.ok) {
-          const resData = await response.json();
-          const createdLead = resData.lead;
-          setLeads(prev => [createdLead, ...prev]);
-          
-          // Dispatch automation trigger on lead creation
-          triggerGlobalWebhook(userId, 'Lead Created', createdLead);
-          triggerWorkflowAutomations(userId, 'Lead Created', 'New', createdLead);
-
-          // Publish log event
-          logAuditEvent({
-            action: 'Lead Acquired',
-            entityType: 'lead',
-            entityId: createdLead.id,
-            details: `Registered new student lead: "${createdLead.name}" via "${createdLead.source}".`
-          });
+         const response = await fetch(`/api/leads/${editingLeadId}`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(dataToSave)
+         });
+         if (response.ok) {
+           const resData = await response.json();
+           const savedLead = resData.lead;
+           
+           // Evaluate keywords trigger and update state accordingly
+           const finalizedLead = await evaluateKeywordsTrigger(userId, savedLead);
+           setLeads(prev => prev.map(l => l.id === editingLeadId ? finalizedLead : l));
+           
+           // If status changed in the edit, trigger status changed events
+           const lead = leads.find(l => l.id === editingLeadId);
+           if (lead && dataToSave.status && lead.status !== dataToSave.status) {
+             const updatedLead = { ...lead, ...dataToSave, tags: finalizedLead.tags };
+             triggerGlobalWebhook(userId, 'Lead Status Changed', updatedLead);
+             triggerWorkflowAutomations(userId, 'Lead Status Changed', dataToSave.status, updatedLead);
+           }
+ 
+           // Publish log event
+           logAuditEvent({
+             action: 'Lead Profile Updated',
+             entityType: 'lead',
+             entityId: editingLeadId,
+             details: `Lead "${dataToSave.name || lead?.name || 'Unknown'}" details updated by admin.`
+           });
+         } else {
+           const errData = await response.json().catch(() => ({}));
+           alert(`Error saving: ${errData.error || response.statusText}`);
+           return;
+         }
+       } else {
+         const response = await fetch('/api/leads', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             ...dataToSave,
+             userId: userId
+           })
+         });
+         if (response.ok) {
+           const resData = await response.json();
+           const createdLead = resData.lead;
+           
+           // Evaluate keywords trigger and update state accordingly
+           const finalizedLead = await evaluateKeywordsTrigger(userId, createdLead);
+           setLeads(prev => [finalizedLead, ...prev]);
+           
+           // Dispatch automation trigger on lead creation
+           triggerGlobalWebhook(userId, 'Lead Created', finalizedLead);
+           triggerWorkflowAutomations(userId, 'Lead Created', 'New', finalizedLead);
+ 
+           // Publish log event
+           logAuditEvent({
+             action: 'Lead Acquired',
+             entityType: 'lead',
+             entityId: finalizedLead.id,
+             details: `Registered new student lead: "${finalizedLead.name}" via "${finalizedLead.source}".`
+           });
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          alert(`Error creating: ${errData.error || response.statusText}`);
+          return;
         }
       }
       closeModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving lead', err);
+      alert(err.message || 'Error saving lead');
     }
   };
 
@@ -531,6 +770,42 @@ export default function LeadsView() {
     }
   };
 
+  // Find duplicates of Email
+  const duplicateEmails = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    leads.forEach(l => {
+      const email = l.email?.trim().toLowerCase();
+      if (email) {
+        counts.set(email, (counts.get(email) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [leads]);
+
+  // Find duplicates of Phone
+  const duplicatePhones = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    leads.forEach(l => {
+      const phone = l.phone?.trim().replace(/[\s-]/g, '');
+      if (phone) {
+        counts.set(phone, (counts.get(phone) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [leads]);
+
+  const isDuplicateEmail = (email?: string) => {
+    if (!email) return false;
+    const clean = email.trim().toLowerCase();
+    return (duplicateEmails.get(clean) || 0) > 1;
+  };
+
+  const isDuplicatePhone = (phone?: string) => {
+    if (!phone) return false;
+    const clean = phone.trim().replace(/[\s-]/g, '');
+    return (duplicatePhones.get(clean) || 0) > 1;
+  };
+
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = lead.name.toLowerCase().includes(search.toLowerCase()) || 
                           lead.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -539,6 +814,17 @@ export default function LeadsView() {
     const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'All' || lead.source === sourceFilter;
     const matchesCountry = countryFilter === 'All' || lead.destination === countryFilter;
+    
+    if (showDuplicatesOnly) {
+      const email = lead.email?.trim().toLowerCase();
+      const phone = lead.phone?.trim().replace(/[\s-]/g, '');
+      const hasDupEmail = email ? (duplicateEmails.get(email) || 0) > 1 : false;
+      const hasDupPhone = phone ? (duplicatePhones.get(phone) || 0) > 1 : false;
+      if (!hasDupEmail && !hasDupPhone) {
+        return false;
+      }
+    }
+    
     return matchesSearch && matchesStatus && matchesSource && matchesCountry;
   });
 
@@ -585,6 +871,14 @@ export default function LeadsView() {
           >
             <Download className="w-4 h-4 text-slate-500" />
             Export Leads
+          </button>
+          <button 
+            onClick={() => setIsTagManagerOpen(true)}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+            title="Open global CRM tag manager"
+          >
+            <Tag className="w-4 h-4 text-indigo-600 animate-pulse" />
+            Tag Manager
           </button>
           <button 
             onClick={openAddModal}
@@ -661,6 +955,20 @@ export default function LeadsView() {
                 <option value="Others">Others</option>
               </select>
             </div>
+
+            {/* Diagnostics / Duplicates Filter */}
+            <button
+              onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-bold transition-all duration-200 shadow-xs cursor-pointer ${
+                showDuplicatesOnly 
+                  ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white' 
+                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+              title="Show only leads that have duplicate email or phone numbers"
+            >
+              <AlertTriangle className={`w-3.5 h-3.5 ${showDuplicatesOnly ? 'text-white' : 'text-amber-500'}`} />
+              {showDuplicatesOnly ? 'Duplicates Only' : 'Find Duplicates'}
+            </button>
             
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
               <ArrowUpDown className="w-4 h-4 text-slate-400" />
@@ -714,6 +1022,68 @@ export default function LeadsView() {
                 </select>
               </div>
 
+              {/* Bulk Tag addition */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowBulkTagAdd(!showBulkTagAdd);
+                    setShowBulkTagRemove(false);
+                  }}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <Tag className="w-3.5 h-3.5 text-indigo-500" />
+                  + Add Tag
+                </button>
+                {showBulkTagAdd && (
+                  <div className="absolute right-0 top-full mt-1.5 z-10 bg-white border border-slate-200 rounded-xl p-3 shadow-md w-56 flex flex-col gap-2">
+                    <input
+                      type="text"
+                      className="border border-slate-200 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-indigo-500 w-full"
+                      placeholder="e.g. priority-lead"
+                      value={bulkTagToAdd}
+                      onChange={(e) => setBulkTagToAdd(e.target.value)}
+                    />
+                    <button
+                      onClick={() => handleBulkAddTag(bulkTagToAdd)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1 text-[11px] font-bold"
+                    >
+                      Apply Tag
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk Tag removal */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowBulkTagRemove(!showBulkTagRemove);
+                    setShowBulkTagAdd(false);
+                  }}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <X className="w-3.5 h-3.5 text-red-500" />
+                  - Remove Tag
+                </button>
+                {showBulkTagRemove && (
+                  <div className="absolute right-0 top-full mt-1.5 z-10 bg-white border border-slate-200 rounded-xl p-3 shadow-md w-56 flex flex-col gap-2">
+                    <input
+                      type="text"
+                      className="border border-slate-200 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-indigo-500 w-full"
+                      placeholder="e.g. test-tag"
+                      value={bulkTagToRemove}
+                      onChange={(e) => setBulkTagToRemove(e.target.value)}
+                    />
+                    <button
+                      onClick={() => handleBulkRemoveTag(bulkTagToRemove)}
+                      className="bg-red-600 hover:bg-red-700 text-white rounded-lg py-1 text-[11px] font-bold"
+                    >
+                      Remove Tag
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={handleBulkDelete}
                 className="bg-white hover:bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
@@ -723,7 +1093,11 @@ export default function LeadsView() {
               </button>
 
               <button
-                onClick={() => setSelectedLeadIds([])}
+                onClick={() => {
+                  setSelectedLeadIds([]);
+                  setShowBulkTagAdd(false);
+                  setShowBulkTagRemove(false);
+                }}
                 className="text-slate-500 hover:text-slate-800 px-2.5 py-1.5 text-xs font-semibold"
               >
                 Clear
@@ -827,9 +1201,19 @@ export default function LeadsView() {
                             {lead.phoneVerified && (
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Phone number verified via OTP" />
                             )}
+                            {isDuplicatePhone(lead.phone) && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Phone Number detected">
+                                Duplicate Phone
+                              </span>
+                            )}
                           </span>
                           <span className="flex items-center gap-1.5 text-slate-500 text-xs">
                             <Mail className="w-3.5 h-3.5" /> {lead.email}
+                            {isDuplicateEmail(lead.email) && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Email Address detected">
+                                Duplicate Email
+                              </span>
+                            )}
                           </span>
                         </div>
                       </td>
@@ -1031,6 +1415,8 @@ export default function LeadsView() {
                   <input 
                     type="number"
                     step="0.5" 
+                    min="6"
+                    max="9"
                     value={formData.targetBand}
                     onChange={(e) => handleInputChange('targetBand', e.target.value)}
                     onBlur={() => handleBlurField('targetBand')}
@@ -1103,6 +1489,135 @@ export default function LeadsView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Global Tag Manager Modal */}
+      {isTagManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div className="absolute inset-0" onClick={() => {
+            setIsTagManagerOpen(false);
+            setEditingTag(null);
+            setNewTagName('');
+          }}></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-slate-900 font-display">CRM Tag Manager</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsTagManagerOpen(false);
+                  setEditingTag(null);
+                  setNewTagName('');
+                }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4 flex-grow">
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Globally manage CRM tags across all leads. You can rename tags to update all matching student profiles, filter leads, or delete tags permanently.
+              </p>
+
+              {distinctTagsWithCounts.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500 font-medium">No tags found on active leads</p>
+                  <p className="text-xs text-slate-400 mt-1">Tags can be entered comma-separated when editing or adding student leads.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white">
+                  {distinctTagsWithCounts.map(({ name, count }) => {
+                    const isBeingEdited = editingTag === name;
+                    return (
+                      <div key={name} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors group">
+                        {isBeingEdited ? (
+                          <div className="flex items-center gap-2 w-full animate-in fade-in duration-150">
+                            <input
+                              type="text"
+                              value={newTagName}
+                              onChange={(e) => setNewTagName(e.target.value)}
+                              className="flex-grow border border-slate-200 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              placeholder="New tag label..."
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                handleRenameTag(name, newTagName);
+                                setEditingTag(null);
+                                setNewTagName('');
+                              }}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-xs"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingTag(null);
+                                setNewTagName('');
+                              }}
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2.5">
+                              <span className="bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-1 rounded-lg text-xs border border-indigo-100/50">
+                                {name}
+                              </span>
+                              <span className="text-xs text-slate-400 font-medium font-mono">
+                                {count} lead{count === 1 ? '' : 's'}
+                              </span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => {
+                                  setSearch(name);
+                                  setIsTagManagerOpen(false);
+                                }}
+                                className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 rounded-lg transition-colors"
+                                title="Filter leads by this tag"
+                              >
+                                <Search className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingTag(name);
+                                  setNewTagName(name);
+                                }}
+                                className="p-1.5 hover:bg-slate-100 hover:text-slate-700 text-slate-400 rounded-lg transition-colors"
+                                title="Rename tag globally"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTag(name)}
+                                className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-400 rounded-lg transition-colors"
+                                title="Delete tag globally from all leads"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400 text-center flex-shrink-0 font-medium">
+              💡 Tip: Click search icon to instantly filter the leads list by that tag category
+            </div>
           </div>
         </div>
       )}
