@@ -160,10 +160,10 @@ export default function PublicForm() {
       }
 
       try {
-        const res = await fetch('https://ip-api.com/json');
+        const res = await fetch('https://ipinfo.io/json');
         if (res.ok) {
           const data = await res.json();
-          const country = data.countryCode;
+          const country = data.country;
           if (country && COUNTRY_CODES[country]) {
             const code = COUNTRY_CODES[country];
             setFormData(prev => {

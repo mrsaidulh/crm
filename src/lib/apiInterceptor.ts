@@ -27,8 +27,8 @@ function jsonResponse(data: any, status = 200): Response {
 const interceptorFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const urlString = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
   
-  // Only intercept relative and absolute requests targeting /api/
-  if (urlString.startsWith('/api/') || urlString.includes('://' + window.location.host + '/api/')) {
+  // Only intercept relative and absolute requests targeting /api/ when Firebase is active and connected
+  if ((urlString.startsWith('/api/') || urlString.includes('://' + window.location.host + '/api/')) && firebaseService.isConnected()) {
     try {
       const parsedUrl = new URL(urlString, window.location.origin);
       const pathname = parsedUrl.pathname;

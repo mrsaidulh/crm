@@ -33,6 +33,8 @@ export default function LeadsView() {
   const [showBulkTagRemove, setShowBulkTagRemove] = useState(false);
 
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [detectedCallingCode, setDetectedCallingCode] = useState('');
   const [formData, setFormData] = useState({ 
     name: '', 
     email: '', 
@@ -229,6 +231,41 @@ export default function LeadsView() {
         setLoading(false);
       });
   }, [userId]);
+
+  useEffect(() => {
+    const detectCode = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.country_calling_code) {
+            setDetectedCallingCode(data.country_calling_code);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('ipapi.co failed:', e);
+      }
+      try {
+        const res = await fetch('https://ipinfo.io/json');
+        if (res.ok) {
+          const data = await res.json();
+          const country = data.country;
+          const map: Record<string, string> = {
+            BD: '+880', US: '+1', CA: '+1', GB: '+44', AU: '+61', NZ: '+64', IE: '+353', IN: '+91'
+          };
+          if (country && map[country]) {
+            setDetectedCallingCode(map[country]);
+            return;
+          }
+        }
+      } catch (e2) {
+        console.warn('ipinfo.io failed:', e2);
+      }
+      setDetectedCallingCode('+880');
+    };
+    detectCode();
+  }, []);
 
   const handleStatusChange = async (id: string, newStatus: LeadStatus) => {
     const lead = leads.find(l => l.id === id);
@@ -540,7 +577,7 @@ export default function LeadsView() {
     setFormData({ 
       name: '', 
       email: '', 
-      phone: '', 
+      phone: detectedCallingCode || '+880', 
       source: 'Direct', 
       notes: '', 
       expectedValue: '', 
@@ -605,6 +642,8 @@ export default function LeadsView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setTouched({
       name: true,
       email: true,
@@ -618,6 +657,8 @@ export default function LeadsView() {
       alert("Please resolve form validation parameters before submitting.");
       return;
     }
+
+    setIsSubmitting(true);
 
     let finalPhone = formData.phone.trim().replace(/[\s-]/g, '');
     if (finalPhone.startsWith('01') && finalPhone.length === 11) {
@@ -670,7 +711,7 @@ export default function LeadsView() {
              triggerGlobalWebhook(userId, 'Lead Status Changed', updatedLead);
              triggerWorkflowAutomations(userId, 'Lead Status Changed', dataToSave.status, updatedLead);
            }
- 
+  
            // Publish log event
            logAuditEvent({
              action: 'Lead Profile Updated',
@@ -681,6 +722,7 @@ export default function LeadsView() {
          } else {
            const errData = await response.json().catch(() => ({}));
            alert(`Error saving: ${errData.error || response.statusText}`);
+           setIsSubmitting(false);
            return;
          }
        } else {
@@ -703,7 +745,7 @@ export default function LeadsView() {
            // Dispatch automation trigger on lead creation
            triggerGlobalWebhook(userId, 'Lead Created', finalizedLead);
            triggerWorkflowAutomations(userId, 'Lead Created', 'New', finalizedLead);
- 
+  
            // Publish log event
            logAuditEvent({
              action: 'Lead Acquired',
@@ -714,6 +756,7 @@ export default function LeadsView() {
         } else {
           const errData = await response.json().catch(() => ({}));
           alert(`Error creating: ${errData.error || response.statusText}`);
+          setIsSubmitting(false);
           return;
         }
       }
@@ -721,6 +764,8 @@ export default function LeadsView() {
     } catch (err: any) {
       console.error('Error saving lead', err);
       alert(err.message || 'Error saving lead');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1478,14 +1523,14 @@ export default function LeadsView() {
                 </button>
                 <button 
                   type="submit" 
-                  disabled={!isFormValid}
+                  disabled={!isFormValid || isSubmitting}
                   className={`flex-1 font-medium py-2 rounded-xl transition-colors shadow-sm ${
-                    isFormValid 
+                    isFormValid && !isSubmitting
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer' 
                       : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  {editingLeadId ? 'Save Changes' : 'Create Lead'}
+                  {isSubmitting ? 'Saving...' : (editingLeadId ? 'Save Changes' : 'Create Lead')}
                 </button>
               </div>
             </form>

@@ -168,9 +168,19 @@ app.post('/api/leads', async (req, res) => {
       return res.status(400).json({ error: `Please fill in all required fields: ${missing.join(', ')}` });
     }
 
+    const bodyCopy = { ...req.body };
+    if (bodyCopy.phone) {
+      let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
+      if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {
+        bodyCopy.phone = '88' + phoneCleaned;
+      } else if (phoneCleaned.startsWith('1') && phoneCleaned.length === 10) {
+        bodyCopy.phone = '880' + phoneCleaned;
+      }
+    }
+
     const newLead = {
       id: uuidv4(),
-      ...req.body,
+      ...bodyCopy,
       createdAt: Date.now()
     };
     await dbService.insertLead(newLead);
@@ -200,7 +210,16 @@ app.put('/api/leads/:id/status', async (req, res) => {
 app.put('/api/leads/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const updated = await dbService.updateLead(id, req.body);
+    const bodyCopy = { ...req.body };
+    if (bodyCopy.phone) {
+      let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
+      if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {
+        bodyCopy.phone = '88' + phoneCleaned;
+      } else if (phoneCleaned.startsWith('1') && phoneCleaned.length === 10) {
+        bodyCopy.phone = '880' + phoneCleaned;
+      }
+    }
+    const updated = await dbService.updateLead(id, bodyCopy);
     if (updated) {
       res.json({ lead: updated });
     } else {
