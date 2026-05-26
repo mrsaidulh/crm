@@ -271,14 +271,35 @@ export const firebaseService = {
     if (isFirebaseActive() && firestoreDb) {
       try {
         const leadRef = collection(firestoreDb, 'leads');
-        const q = userId 
-          ? query(leadRef, where('userId', '==', userId))
-          : leadRef;
-        const snapshot = await getDocs(q);
-        const data: Lead[] = [];
-        snapshot.forEach((docSnap) => {
-          data.push(docSnap.data() as Lead);
-        });
+        const dataMap = new Map<string, Lead>();
+
+        if (userId) {
+          // Fetch leads for the specified user ID
+          const qPrimary = query(leadRef, where('userId', '==', userId));
+          const snapPrimary = await getDocs(qPrimary);
+          snapPrimary.forEach((docSnap) => {
+            const lead = docSnap.data() as Lead;
+            dataMap.set(lead.id, lead);
+          });
+
+          // Fallback check to fetch leads registered under the main/anonymous tenant if different
+          if (userId !== 'ielts_crm_main_user') {
+            const qFallback = query(leadRef, where('userId', '==', 'ielts_crm_main_user'));
+            const snapFallback = await getDocs(qFallback);
+            snapFallback.forEach((docSnap) => {
+              const lead = docSnap.data() as Lead;
+              dataMap.set(lead.id, lead);
+            });
+          }
+        } else {
+          const snapAll = await getDocs(leadRef);
+          snapAll.forEach((docSnap) => {
+            const lead = docSnap.data() as Lead;
+            dataMap.set(lead.id, lead);
+          });
+        }
+
+        const data = Array.from(dataMap.values());
         return data.sort((a, b) => b.createdAt - a.createdAt);
       } catch (err) {
         
@@ -295,7 +316,7 @@ if (String(err).toLowerCase().includes('offline')) {
     // Local storage fallback
     const local = getLocalItem<Lead>('leads');
     if (userId) {
-      return local.filter(l => l.userId === userId);
+      return local.filter(l => l.userId === userId || l.userId === 'ielts_crm_main_user');
     }
     return local;
   },

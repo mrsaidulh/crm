@@ -468,6 +468,9 @@ export default function PublicForm() {
   const handleVerifyOtpAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
+    if (verificationLoading || status === 'submitting' || status === 'success') {
+      return;
+    }
 
     if (!otpCode.trim() || otpCode.length < 6) {
       setValidationError('Please enter a valid 6-digit verification pin.');
