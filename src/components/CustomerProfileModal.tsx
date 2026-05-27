@@ -277,10 +277,10 @@ export default function CustomerProfileModal({ customer, onClose }: Props) {
                     No communication history. Add a log to get started.
                   </div>
                 ) : (
-                  customer.communications.map((comm) => (
-                    <div key={comm.id} className="flex gap-4">
+                  customer.communications.map((comm, index) => (
+                    <div key={comm.id || `comm-${index}`} className="flex gap-4">
                       <div className="mt-1 relative flex-shrink-0">
-                        <div className={`w-8 h-8 rounded-full flex flex-col items-center justify-center text-xs font-bold \${
+                        <div className={`w-8 h-8 rounded-full flex flex-col items-center justify-center text-xs font-bold ${
                             comm.type === 'Call' ? 'bg-emerald-100 text-emerald-700' :
                           comm.type === 'Meeting' ? 'bg-indigo-100 text-indigo-700' :
                           comm.type === 'Email' ? 'bg-blue-100 text-blue-700' :
@@ -314,11 +314,11 @@ export default function CustomerProfileModal({ customer, onClose }: Props) {
                  {tasks.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 text-sm">No tasks assigned for this lead.</div>
                  ) : (
-                    tasks.map(task => {
+                    tasks.map((task, index) => {
                        const isOverdue = isBefore(new Date(task.dueDate), startOfDay(new Date())) && task.status !== 'Completed';
                        const TypeIcon = task.taskType === 'Meeting' ? Briefcase : task.taskType === 'Call' ? Phone : task.taskType === 'Email' ? MessageSquare : CheckSquare;
                        return (
-                         <div key={task.id} className={`flex items-start gap-4 p-4 border rounded-xl ${task.status === 'Completed' ? 'bg-slate-50/50 border-slate-100' : 'bg-white border-slate-200 shadow-sm'} ${isOverdue ? 'border-red-200 bg-red-50/30' : ''}`}>
+                         <div key={task.id || `task-${index}`} className={`flex items-start gap-4 p-4 border rounded-xl ${task.status === 'Completed' ? 'bg-slate-50/50 border-slate-100' : 'bg-white border-slate-200 shadow-sm'} ${isOverdue ? 'border-red-200 bg-red-50/30' : ''}`}>
                             <div className="flex-1 min-w-0">
                                <div className="flex items-center gap-2 mb-1">
                                   <TypeIcon className={`w-4 h-4 ${task.status === 'Completed' ? 'text-slate-400' : 'text-indigo-600'}`} />

@@ -227,17 +227,21 @@ export const dbService = {
   // --- LEADS INTERACTION ROUTES ---
   
   async getLeads(userId?: string): Promise<Lead[]> {
+    let list: Lead[] = [];
     if (pool) {
       try {
         const [results] = await pool.execute('SELECT * FROM leads ORDER BY created_at DESC');
         const rows = results as any[];
-        return rows.map(mapDbRowToLead);
+        list = rows.map(mapDbRowToLead);
       } catch (err) {
         console.error('[MySQL] getLeads failed. Falling back to in-memory store:', err);
+        list = inMemoryLeads;
       }
+    } else {
+      // Fallback to In-memory logic
+      list = inMemoryLeads;
     }
-    // Fallback to In-memory logic
-    return inMemoryLeads;
+    return list.filter(l => l && l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' && l.name?.trim() !== 'Saidul');
   },
 
   async insertLead(lead: Lead): Promise<void> {

@@ -268,6 +268,7 @@ export const firebaseService = {
 
   // --- LEADS ---
   async getLeads(userId?: string): Promise<Lead[]> {
+    let result: Lead[] = [];
     if (isFirebaseActive() && firestoreDb) {
       try {
         const leadRef = collection(firestoreDb, 'leads');
@@ -280,7 +281,7 @@ export const firebaseService = {
         });
 
         const data = Array.from(dataMap.values());
-        return data.sort((a, b) => b.createdAt - a.createdAt);
+        result = data.sort((a, b) => b.createdAt - a.createdAt);
       } catch (err) {
         
 if (String(err).toLowerCase().includes('offline')) {
@@ -291,11 +292,13 @@ if (String(err).toLowerCase().includes('offline')) {
 
         handleFirestoreError(err, OperationType.LIST, 'leads');
       }
+    } else {
+      // Local storage fallback
+      result = getLocalItem<Lead>('leads');
     }
-    
-    // Local storage fallback
-    const local = getLocalItem<Lead>('leads');
-    return local;
+
+    // Filter out the requested delete of template lead "Saidul" with email "sdflj@gmail.com"
+    return result.filter(l => l && l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' && l.name?.trim() !== 'Saidul');
   },
 
   async insertLead(lead: Lead): Promise<void> {

@@ -88,57 +88,57 @@ export default function FunnelView() {
                 </div>
                 
                 <div className="p-4 flex-1 space-y-3 md:overflow-y-auto min-h-[80px]">
-                  {columnLeads.map(lead => (
-                    <div 
-                      key={lead.id} 
-                      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 transition-all duration-200 group relative cursor-default"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-semibold text-slate-900 text-sm">{lead.name}</h4>
-                      </div>
-                      
-                      <div className="space-y-1.5 focus:outline-none">
-                        <p className="text-[11px] text-slate-500 flex items-center gap-2">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" /> {lead.phone}
-                        </p>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-2">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" /> {lead.email}
-                        </p>
-                        {lead.expectedValue && lead.expectedValue > 0 && (
-                          <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-2 mt-1">
-                            ${lead.expectedValue.toLocaleString()} Value
-                          </p>
-                        )}
-                      </div>
-
-                      {lead.notes && (
-                        <div className="mt-3 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 italic border border-slate-100">
-                          "{lead.notes.length > 60 ? lead.notes.substring(0, 60) + '...' : lead.notes}"
+                  {columnLeads.length > 0 ? (
+                    columnLeads.map(lead => (
+                      <div 
+                        key={lead.id || `lead-${lead.name || ''}-${lead.createdAt}`} 
+                        className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 transition-all duration-200 group relative cursor-default"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-semibold text-slate-900 text-sm">{lead.name}</h4>
                         </div>
-                      )}
-                      
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200/60">
-                          {lead.source}
-                        </span>
                         
-                        <div className="flex items-center gap-1.5 relative">
-                          <span className="text-[9px] text-slate-400 font-medium hidden xs:inline">Move:</span>
-                          <select
-                            value={lead.status}
-                            onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
-                            className="text-[11px] font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-md py-1 px-2 cursor-pointer transition-colors focus:ring-0 focus:outline-none focus:border-slate-300 active:scale-95 duration-100"
-                            title="Move Lead Status"
-                          >
-                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                        <div className="space-y-1.5 focus:outline-none">
+                          <p className="text-[11px] text-slate-500 flex items-center gap-2">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" /> {lead.phone}
+                          </p>
+                          <p className="text-[11px] text-slate-500 flex items-center gap-2">
+                            <Mail className="w-3.5 h-3.5 text-slate-400" /> {lead.email}
+                          </p>
+                          {lead.expectedValue && lead.expectedValue > 0 && (
+                            <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-2 mt-1">
+                              ${lead.expectedValue.toLocaleString()} Value
+                            </p>
+                          )}
+                        </div>
+
+                        {lead.notes && (
+                          <div className="mt-3 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 italic border border-slate-100">
+                            "{lead.notes.length > 60 ? lead.notes.substring(0, 60) + '...' : lead.notes}"
+                          </div>
+                        )}
+                        
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200/60">
+                            {lead.source}
+                          </span>
+                          
+                          <div className="flex items-center gap-1.5 relative">
+                            <span className="text-[9px] text-slate-400 font-medium hidden xs:inline">Move:</span>
+                            <select
+                              value={lead.status}
+                              onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
+                              className="text-[11px] font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-md py-1 px-2 cursor-pointer transition-colors focus:ring-0 focus:outline-none focus:border-slate-300 active:scale-95 duration-100"
+                              title="Move Lead Status"
+                            >
+                              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  
-                  {columnLeads.length === 0 && (
-                    <div className="p-4 text-center border-2 border-dashed border-slate-200/60 rounded-xl bg-slate-50/50">
+                    ))
+                  ) : (
+                    <div key="empty-stage" className="p-4 text-center border-2 border-dashed border-slate-200/60 rounded-xl bg-slate-50/50">
                       <span className="text-xs font-medium text-slate-400">No leads in this stage</span>
                     </div>
                   )}

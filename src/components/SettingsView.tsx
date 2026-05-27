@@ -117,6 +117,7 @@ export default function SettingsView() {
   const [profilePassword, setProfilePassword] = useState('');
   const [profileMessage, setProfileMessage] = useState('');
   const [profileUpdating, setProfileUpdating] = useState(false);
+  const [showMasterPassword, setShowMasterPassword] = useState(false);
 
   useEffect(() => {
     if (user) {

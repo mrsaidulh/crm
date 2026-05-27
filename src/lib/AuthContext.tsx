@@ -38,12 +38,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       // Clear previous lead data as requested
-      if (!localStorage.getItem('crm_leads_cleared_v1')) {
+      if (!localStorage.getItem('crm_leads_cleared_v2')) {
         localStorage.setItem('crm_db_leads', JSON.stringify([]));
         localStorage.setItem('crm_db_tasks', JSON.stringify([]));
         localStorage.setItem('crm_db_campaigns', JSON.stringify([]));
         localStorage.setItem('crm_db_audit-logs', JSON.stringify([]));
-        localStorage.setItem('crm_leads_cleared_v1', 'true');
+        localStorage.setItem('crm_leads_cleared_v2', 'true');
+        
+        // Wipe server database
+        fetch('/api/admin/clear-all-leads', { method: 'POST' }).catch(err => console.warn('Wipe failed:', err));
       }
 
       // 1. Ensure a default admin account exists in localStorage
@@ -60,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const defaultAdmin: ManualUser = {
         uid: 'ielts_crm_main_user',
-        email: 'toieltsrevolution.com',
+        email: 'toieltsrevolution@gmail.com',
         password: 'Irevocrm1$%',
         displayName: 'Saidul Hasan',
         role: 'Super Admin'
@@ -121,9 +124,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (activeSession) {
         try {
           let sessionUser = JSON.parse(activeSession);
-          if (sessionUser.email === 'admin@crm.com' && sessionUser.uid === 'ielts_crm_main_user') {
-               sessionUser = defaultAdmin;
-               localStorage.setItem('crm_active_session', JSON.stringify(sessionUser));
+          if (
+            !sessionUser.email || 
+            sessionUser.email.toLowerCase() === 'admin@crm.com' || 
+            sessionUser.displayName === 'Administrator Name' || 
+            sessionUser.uid === 'ielts_crm_main_user'
+          ) {
+            sessionUser = {
+              uid: 'ielts_crm_main_user',
+              email: 'toieltsrevolution@gmail.com',
+              displayName: 'Saidul Hasan',
+              role: 'Super Admin'
+            };
+            localStorage.setItem('crm_active_session', JSON.stringify(sessionUser));
           }
           // Make sure sessionUser exists in synchronized savedUsers to match their synced details
           const matchingUser = savedUsers.find(u => u && u.email && u.email.toLowerCase() === sessionUser.email.toLowerCase());
@@ -132,7 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               uid: matchingUser.uid,
               email: matchingUser.email,
               displayName: matchingUser.displayName,
-              role: matchingUser.role || (matchingUser.email.toLowerCase() === 'toieltsrevolution.com' ? 'Super Admin' : 'Counselor')
+              role: matchingUser.role || (matchingUser.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor')
             };
           }
           setUser(sessionUser);
@@ -197,8 +210,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uid: targetUid,
         email: emailLower,
         password: password,
-        displayName: emailLower.toLowerCase() === 'toieltsrevolution.com' || emailLower.includes('saidul') ? 'Saidul Hasan' : 'Administrator Name',
-        role: emailLower.toLowerCase() === 'toieltsrevolution.com' ? 'Super Admin' : 'Counselor'
+        displayName: emailLower.toLowerCase() === 'toieltsrevolution@gmail.com' || emailLower.includes('saidul') ? 'Saidul Hasan' : 'Administrator Name',
+        role: emailLower.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor'
       };
       savedUsers.push(found);
       localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
@@ -224,7 +237,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       uid: found.uid,
       email: found.email,
       displayName: found.displayName,
-      role: found.role || (found.email.toLowerCase() === 'toieltsrevolution.com' ? 'Super Admin' : 'Counselor')
+      role: found.role || (found.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor')
     };
 
     localStorage.setItem('crm_active_session', JSON.stringify(sessionUser));
@@ -267,7 +280,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: email.trim(),
       password: password,
       displayName: displayName,
-      role: emailLower === 'toieltsrevolution.com' ? 'Super Admin' : 'Counselor'
+      role: emailLower === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor'
     };
 
     savedUsers.push(newUser);
@@ -347,7 +360,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isSuperAdmin = 
     user?.role === 'Super Admin' || 
-    user?.email.toLowerCase() === 'toieltsrevolution.com' || 
+    user?.email.toLowerCase() === 'toieltsrevolution@gmail.com' || 
     user?.email.toLowerCase() === 'saidulgmac@gmail.com' ||
     user?.email.toLowerCase().includes('saidul');
 
