@@ -179,9 +179,9 @@ app.post('/api/leads', async (req, res) => {
     }
 
     const newLead = {
-      id: uuidv4(),
+      id: req.body.id || uuidv4(),
       ...bodyCopy,
-      createdAt: Date.now()
+      createdAt: req.body.createdAt || Date.now()
     };
     await dbService.insertLead(newLead);
     res.status(201).json({ lead: newLead });
@@ -254,11 +254,11 @@ app.post('/api/campaigns/sms', async (req, res) => {
   }
   
   const newCampaign = {
-    id: uuidv4(),
+    id: req.body.id || uuidv4(),
     type: 'SMS' as const,
     audience,
     message,
-    sentAt: Date.now(),
+    sentAt: req.body.sentAt || Date.now(),
     status: 'Sent',
     userId: userId || 'ielts_crm_main_user'
   };
@@ -282,12 +282,12 @@ app.post('/api/campaigns/email', async (req, res) => {
   }
   
   const newCampaign = {
-    id: uuidv4(),
+    id: req.body.id || uuidv4(),
     type: 'Email' as const,
     audience,
     subject,
     body,
-    sentAt: Date.now(),
+    sentAt: req.body.sentAt || Date.now(),
     status: 'Sent',
     userId: userId || 'ielts_crm_main_user'
   };
@@ -356,13 +356,13 @@ app.post('/api/audit-logs', async (req, res) => {
   try {
     const { action, entityType, entityId, details, userId } = req.body;
     const newLog = {
-      id: uuidv4(),
+      id: req.body.id || uuidv4(),
       userId: userId || 'ielts_crm_main_user',
       action,
       entityType,
       entityId,
       details: details || '',
-      createdAt: Date.now()
+      createdAt: req.body.createdAt || Date.now()
     };
     await dbService.insertAuditLog(newLog);
     res.status(201).json({ success: true, log: newLog });
@@ -417,7 +417,7 @@ app.get('/api/tasks', async (req, res) => {
 app.post('/api/tasks', async (req, res) => {
   try {
     const newTask = {
-      id: uuidv4(),
+      id: req.body.id || uuidv4(),
       ...req.body,
       status: req.body.status || 'Pending'
     };
@@ -468,7 +468,7 @@ app.get('/api/templates', async (req, res) => {
 app.post('/api/templates', async (req, res) => {
   try {
     const newTemplate = {
-      id: uuidv4(),
+      id: req.body.id || uuidv4(),
       ...req.body
     };
     await dbService.insertTemplate(newTemplate);
@@ -518,8 +518,8 @@ app.get('/api/workflows', async (req, res) => {
 app.post('/api/workflows', async (req, res) => {
   try {
     const newWorkflow = {
-      id: uuidv4(),
-      createdAt: Date.now(),
+      id: req.body.id || uuidv4(),
+      createdAt: req.body.createdAt || Date.now(),
       ...req.body
     };
     await dbService.insertWorkflow(newWorkflow);
@@ -569,8 +569,8 @@ app.get('/api/team-members', async (req, res) => {
 app.post('/api/team-members', async (req, res) => {
   try {
     const newMember = {
-      id: uuidv4(),
-      createdAt: Date.now(),
+      id: req.body.id || uuidv4(),
+      createdAt: req.body.createdAt || Date.now(),
       status: 'Invited' as const,
       ...req.body
     };

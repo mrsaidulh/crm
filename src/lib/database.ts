@@ -181,7 +181,10 @@ export const dbService = {
       try {
         let rows: any[];
         if (userId) {
-          const [results] = await pool.execute('SELECT * FROM leads WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+          const [results] = await pool.execute(
+            'SELECT * FROM leads WHERE user_id = ? OR user_id = \'ielts_crm_main_user\' ORDER BY created_at DESC',
+            [userId]
+          );
           rows = results as any[];
         } else {
           const [results] = await pool.execute('SELECT * FROM leads ORDER BY created_at DESC');
@@ -194,7 +197,7 @@ export const dbService = {
     }
     // Fallback to In-memory logic
     if (userId) {
-      return inMemoryLeads.filter(l => l.userId === userId);
+      return inMemoryLeads.filter(l => l.userId === userId || l.userId === 'ielts_crm_main_user');
     }
     return inMemoryLeads;
   },

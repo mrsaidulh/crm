@@ -155,6 +155,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
           ...bodyCopy,
           createdAt: Date.now()
         };
+        
+        // Propagate to real Express backend (MySQL)
+        try {
+          await originalFetch('/api/leads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newLead)
+          });
+          console.log('[API Interceptor] Successfully sync-duplicated lead to MySQL.');
+        } catch (e) {
+          console.warn('[API Interceptor] Sync lead to MySQL failed (acceptable in client-only/offline mode):', e);
+        }
+
         await firebaseService.insertLead(newLead);
         return jsonResponse({ lead: newLead }, 201);
       }
@@ -163,6 +176,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         const segments = pathname.split('/');
         const id = segments[segments.length - 2];
         const status = body?.status;
+
+        // Propagate to real Express backend (MySQL)
+        try {
+          await originalFetch(pathname, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+          });
+          console.log('[API Interceptor] Successfully sync-duplicated lead status update to MySQL.');
+        } catch (e) {
+          console.warn('[API Interceptor] Sync lead status to MySQL failed:', e);
+        }
+
         const updated = await firebaseService.updateLeadStatus(id, status);
         if (updated) return jsonResponse({ lead: updated });
         return jsonResponse({ error: 'Lead not found' }, 404);
@@ -179,6 +205,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
             bodyCopy.phone = '880' + phoneCleaned;
           }
         }
+
+        // Propagate to real Express backend (MySQL)
+        try {
+          await originalFetch(pathname, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyCopy)
+          });
+          console.log('[API Interceptor] Successfully sync-duplicated lead edit to MySQL.');
+        } catch (e) {
+          console.warn('[API Interceptor] Sync lead edit to MySQL failed:', e);
+        }
+
         const updated = await firebaseService.updateLead(id, bodyCopy);
         if (updated) return jsonResponse({ lead: updated });
         return jsonResponse({ error: 'Lead not found' }, 404);
@@ -186,6 +225,17 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       
       if (pathname.startsWith('/api/leads/') && method === 'DELETE') {
         const id = pathname.split('/').pop() || '';
+
+        // Propagate to real Express backend (MySQL)
+        try {
+          await originalFetch(pathname, {
+            method: 'DELETE'
+          });
+          console.log('[API Interceptor] Successfully sync-duplicated lead delete to MySQL.');
+        } catch (e) {
+          console.warn('[API Interceptor] Sync lead delete to MySQL failed:', e);
+        }
+
         const deleted = await firebaseService.deleteLead(id);
         if (deleted) return jsonResponse({ lead: deleted });
         return jsonResponse({ error: 'Lead not found' }, 404);
