@@ -273,31 +273,11 @@ export const firebaseService = {
         const leadRef = collection(firestoreDb, 'leads');
         const dataMap = new Map<string, Lead>();
 
-        if (userId) {
-          // Fetch leads for the specified user ID
-          const qPrimary = query(leadRef, where('userId', '==', userId));
-          const snapPrimary = await getDocs(qPrimary);
-          snapPrimary.forEach((docSnap) => {
-            const lead = docSnap.data() as Lead;
-            dataMap.set(lead.id, lead);
-          });
-
-          // Fallback check to fetch leads registered under the main/anonymous tenant if different
-          if (userId !== 'ielts_crm_main_user') {
-            const qFallback = query(leadRef, where('userId', '==', 'ielts_crm_main_user'));
-            const snapFallback = await getDocs(qFallback);
-            snapFallback.forEach((docSnap) => {
-              const lead = docSnap.data() as Lead;
-              dataMap.set(lead.id, lead);
-            });
-          }
-        } else {
-          const snapAll = await getDocs(leadRef);
-          snapAll.forEach((docSnap) => {
-            const lead = docSnap.data() as Lead;
-            dataMap.set(lead.id, lead);
-          });
-        }
+        const snapAll = await getDocs(leadRef);
+        snapAll.forEach((docSnap) => {
+          const lead = docSnap.data() as Lead;
+          dataMap.set(lead.id, lead);
+        });
 
         const data = Array.from(dataMap.values());
         return data.sort((a, b) => b.createdAt - a.createdAt);
@@ -315,9 +295,6 @@ if (String(err).toLowerCase().includes('offline')) {
     
     // Local storage fallback
     const local = getLocalItem<Lead>('leads');
-    if (userId) {
-      return local.filter(l => l.userId === userId || l.userId === 'ielts_crm_main_user');
-    }
     return local;
   },
 

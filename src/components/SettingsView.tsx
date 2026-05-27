@@ -7,7 +7,7 @@ import { firebaseService, initFirebase, disconnectFirebase } from '../lib/fireba
 type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'database';
 
 export default function SettingsView() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [settings, setSettings] = useState<UserSettings>({});
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -304,7 +304,22 @@ export default function SettingsView() {
         </div>
 
         <div className="md:col-span-3 space-y-6">
-          {activeTab === 'profile' && (
+          {activeTab !== 'profile' && !isSuperAdmin ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center max-w-lg mx-auto my-8 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-100">
+                <Shield className="w-8 h-8 text-rose-500" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-900 mb-2">Super Admin Access Required</h2>
+              <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                System configuration (including Team Management, SMTP services, API gateways, n8n webhooks, and database configurations) is restricted. Only authorized Super Administrators can view or modify these system parameters.
+              </p>
+              <div className="text-xs text-slate-400 bg-slate-50 border border-slate-100 rounded-lg py-2 px-3 inline-block">
+                Standard users are permitted to view and maintain leads.
+              </div>
+            </div>
+          ) : (
+            <>
+              {activeTab === 'profile' && (
             <form onSubmit={handleUpdateProfile} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 mb-1 border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -958,6 +973,8 @@ export default function SettingsView() {
                 </div>
               </div>
             </div>
+          )}
+          </>
           )}
 
         </div>

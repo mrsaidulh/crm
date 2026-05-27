@@ -1,6 +1,13 @@
 import mysql from 'mysql2/promise';
 import { Lead, Campaign, AuditLog, Task, Template, WorkflowRule, UserSettings, TeamMember } from '../types';
 
+export interface ManualAuthUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  password?: string;
+}
+
 // hold our in-memory fallback list
 let inMemoryLeads: Lead[] = [];
 
@@ -23,6 +30,7 @@ let inMemoryTemplates: Template[] = [];
 let inMemoryWorkflows: WorkflowRule[] = [];
 let inMemorySettings: Record<string, UserSettings> = {};
 let inMemoryTeamMembers: TeamMember[] = [];
+let inMemoryUsers: ManualAuthUser[] = [];
 
 // Convert DB row to domain Tasks object
 function mapDbRowToTask(r: any): Task {
@@ -105,6 +113,16 @@ function mapDbRowToTeamMember(r: any): TeamMember {
   };
 }
 
+// Convert DB row to domain ManualAuthUser object
+function mapDbRowToUser(r: any): ManualAuthUser {
+  return {
+    uid: r.uid,
+    email: r.email,
+    displayName: r.display_name,
+    password: r.password || undefined
+  };
+}
+
 
 
 // Determine if MySQL credentials are provided (supporting both DB_ and MYSQL_ prefixes)
@@ -132,8 +150,25 @@ try {
   
   // Proactively check handshake connection asynchronously to prevent error logs spamming
   tempPool.getConnection()
-    .then((conn) => {
+    .then(async (conn) => {
       console.log(`[MySQL] Active Handshake Succeeded. Database cPanel is live and connected at ${dbHost}:${dbPort}`);
+      
+      try {
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS \`crm_users_auth\` (
+            \`uid\` VARCHAR(128) NOT NULL,
+            \`email\` VARCHAR(255) NOT NULL,
+            \`display_name\` VARCHAR(255) NOT NULL,
+            \`password\` VARCHAR(255) DEFAULT NULL,
+            PRIMARY KEY (\`uid\`),
+            UNIQUE KEY \`uniq_email_auth\` (\`email\`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+        console.log('[MySQL] Auto-initialized crm_users_auth table successfully.');
+      } catch (tableErr: any) {
+        console.warn('[MySQL] Failed to auto-create crm_users_auth table:', tableErr.message);
+      }
+
       pool = tempPool; // Only make the pool active once connection is proven healthy
       conn.release();
     })
@@ -179,26 +214,14 @@ export const dbService = {
   async getLeads(userId?: string): Promise<Lead[]> {
     if (pool) {
       try {
-        let rows: any[];
-        if (userId) {
-          const [results] = await pool.execute(
-            'SELECT * FROM leads WHERE user_id = ? OR user_id = \'ielts_crm_main_user\' ORDER BY created_at DESC',
-            [userId]
-          );
-          rows = results as any[];
-        } else {
-          const [results] = await pool.execute('SELECT * FROM leads ORDER BY created_at DESC');
-          rows = results as any[];
-        }
+        const [results] = await pool.execute('SELECT * FROM leads ORDER BY created_at DESC');
+        const rows = results as any[];
         return rows.map(mapDbRowToLead);
       } catch (err) {
         console.error('[MySQL] getLeads failed. Falling back to in-memory store:', err);
       }
     }
     // Fallback to In-memory logic
-    if (userId) {
-      return inMemoryLeads.filter(l => l.userId === userId || l.userId === 'ielts_crm_main_user');
-    }
     return inMemoryLeads;
   },
 
@@ -948,6 +971,37 @@ export const dbService = {
       return true;
     }
     return false;
+  },
+
+  // --- USER AUTHENTICATION SYNCHRONIZATION ---
+  async getAuthUsers(): Promise<ManualAuthUser[]> {
+    if (pool) {
+      try {
+        const [results] = await pool.execute('SELECT * FROM crm_users_auth');
+        return (results as any[]).map(mapDbRowToUser);
+      } catch (err) {
+        console.error('[MySQL] getAuthUsers failed:', err);
+      }
+    }
+    return inMemoryUsers;
+  },
+
+  async insertAuthUser(u: ManualAuthUser): Promise<void> {
+    if (pool) {
+      try {
+        const sql = `INSERT INTO crm_users_auth (uid, email, display_name, password) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), password = VALUES(password)`;
+        await pool.execute(sql, [u.uid, u.email.toLowerCase(), u.displayName, u.password || null]);
+        return;
+      } catch (err) {
+        console.error('[MySQL] insertAuthUser failed:', err);
+      }
+    }
+    const existingIdx = inMemoryUsers.findIndex(x => x.email.toLowerCase() === u.email.toLowerCase());
+    if (existingIdx !== -1) {
+      inMemoryUsers[existingIdx] = u;
+    } else {
+      inMemoryUsers.push(u);
+    }
   },
 
   isPoolActive(): boolean {

@@ -608,6 +608,29 @@ app.delete('/api/team-members/:id', async (req, res) => {
 });
 
 
+// --- USER AUTHENTICATION SYNCHRONIZATION ENDPOINTS ---
+app.get('/api/auth/users', async (req, res) => {
+  try {
+    const users = await dbService.getAuthUsers();
+    res.json({ users });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error fetching synchronized users' });
+  }
+});
+
+app.post('/api/auth/users', async (req, res) => {
+  try {
+    const { uid, email, displayName, password } = req.body;
+    if (!uid || !email || !displayName) {
+      return res.status(400).json({ error: 'uid, email, and displayName are required for sync' });
+    }
+    await dbService.insertAuthUser({ uid, email, displayName, password });
+    res.status(201).json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error registering/synchronizing user' });
+  }
+});
+
 
 // --- VITE DEV MIDDLEWARE & PROD FALLBACK ---
 async function startServer() {

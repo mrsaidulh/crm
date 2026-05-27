@@ -212,7 +212,7 @@ export default function LeadsView() {
     !errors.targetBand &&
     !errors.destination;
 
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
 
   useEffect(() => {
@@ -338,6 +338,10 @@ export default function LeadsView() {
 
   const handleBulkDelete = async () => {
     if (selectedLeadIds.length === 0) return;
+    if (!isSuperAdmin) {
+      alert('Access Denied: Only a Super Admin is authorized to permanently delete leads.');
+      return;
+    }
     if (!confirm(`Are you sure you want to delete ${selectedLeadIds.length} selected lead(s)?`)) return;
     try {
       setLoading(true);
@@ -804,6 +808,10 @@ export default function LeadsView() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isSuperAdmin) {
+      alert('Access Denied: Only a Super Admin is authorized to permanently delete leads.');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this lead?')) return;
     try {
       const resp = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
