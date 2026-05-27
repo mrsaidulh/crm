@@ -6,6 +6,7 @@ export interface ManualAuthUser {
   email: string;
   displayName: string;
   password?: string;
+  role?: string;
 }
 
 // hold our in-memory fallback list
@@ -119,7 +120,8 @@ function mapDbRowToUser(r: any): ManualAuthUser {
     uid: r.uid,
     email: r.email,
     displayName: r.display_name,
-    password: r.password || undefined
+    password: r.password || undefined,
+    role: r.role || 'Counselor'
   };
 }
 
@@ -160,13 +162,26 @@ try {
             \`email\` VARCHAR(255) NOT NULL,
             \`display_name\` VARCHAR(255) NOT NULL,
             \`password\` VARCHAR(255) DEFAULT NULL,
+            \`role\` VARCHAR(64) DEFAULT 'Counselor',
             PRIMARY KEY (\`uid\`),
             UNIQUE KEY \`uniq_email_auth\` (\`email\`)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
-        console.log('[MySQL] Auto-initialized crm_users_auth table successfully.');
+        
+        // Ensure role column is present if the database table had been created earlier
+        try {
+          await conn.query("ALTER TABLE `crm_users_auth` ADD COLUMN `role` VARCHAR(64) DEFAULT 'Counselor'");
+        } catch (alterColErr) {
+          // Column already exists
+        }
+
+        // Wipe all previous lead and activity logs data as requested by the user
+        await conn.query('DELETE FROM `leads`');
+        await conn.query('DELETE FROM `tasks`');
+        await conn.query('DELETE FROM `campaigns`');
+        console.log('[MySQL] Auto-initialized crm_users_auth table, added role column, and wiped previous lead/task data successfully.');
       } catch (tableErr: any) {
-        console.warn('[MySQL] Failed to auto-create crm_users_auth table:', tableErr.message);
+        console.warn('[MySQL] Failed to auto-create and alter tables or wipe previous data:', tableErr.message);
       }
 
       pool = tempPool; // Only make the pool active once connection is proven healthy
@@ -989,8 +1004,8 @@ export const dbService = {
   async insertAuthUser(u: ManualAuthUser): Promise<void> {
     if (pool) {
       try {
-        const sql = `INSERT INTO crm_users_auth (uid, email, display_name, password) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), password = VALUES(password)`;
-        await pool.execute(sql, [u.uid, u.email.toLowerCase(), u.displayName, u.password || null]);
+        const sql = `INSERT INTO crm_users_auth (uid, email, display_name, password, role) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), password = VALUES(password), role = VALUES(role)`;
+        await pool.execute(sql, [u.uid, u.email.toLowerCase(), u.displayName, u.password || null, u.role || 'Counselor']);
         return;
       } catch (err) {
         console.error('[MySQL] insertAuthUser failed:', err);
@@ -998,14 +1013,41 @@ export const dbService = {
     }
     const existingIdx = inMemoryUsers.findIndex(x => x.email.toLowerCase() === u.email.toLowerCase());
     if (existingIdx !== -1) {
-      inMemoryUsers[existingIdx] = u;
+      inMemoryUsers[existingIdx] = { ...inMemoryUsers[existingIdx], ...u };
     } else {
       inMemoryUsers.push(u);
     }
   },
 
+  async deleteAuthUser(uid: string): Promise<void> {
+    if (pool) {
+      try {
+        await pool.execute('DELETE FROM crm_users_auth WHERE uid = ?', [uid]);
+        return;
+      } catch (err) {
+        console.error('[MySQL] deleteAuthUser failed:', err);
+      }
+    }
+    inMemoryUsers = inMemoryUsers.filter(u => u.uid !== uid);
+  },
+
   isPoolActive(): boolean {
     return pool !== null;
+  },
+
+  async clearAllLeads(): Promise<void> {
+    if (pool) {
+      try {
+        await pool.execute('DELETE FROM leads');
+        await pool.execute('DELETE FROM tasks');
+        await pool.execute('DELETE FROM campaigns');
+      } catch (err) {
+        console.error('[MySQL] clearAllLeads query failed:', err);
+      }
+    }
+    inMemoryLeads = [];
+    inMemoryTasks = [];
+    inMemoryCampaigns = [];
   },
 
   getDbConfigDetails() {

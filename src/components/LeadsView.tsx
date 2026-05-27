@@ -1204,11 +1204,11 @@ export default function LeadsView() {
                   <td colSpan={8} className="px-6 py-8 text-center text-slate-500">No leads found matching your criteria.</td>
                 </tr>
               ) : (
-                sortedLeads.map((lead) => {
+                sortedLeads.map((lead, idx) => {
                   const scoreDetails = calculateLeadScore(lead);
                   const isSelected = selectedLeadIds.includes(lead.id);
                   return (
-                    <tr key={lead.id} className={`hover:bg-slate-50/50 transition-colors group ${isSelected ? 'bg-indigo-50/30' : ''}`}>
+                    <tr key={lead.id ? `${lead.id}-${idx}` : `lead-idx-${idx}`} className={`hover:bg-slate-50/50 transition-colors group ${isSelected ? 'bg-indigo-50/30' : ''}`}>
                       <td className="pl-6 pr-2 py-4 w-10">
                         <input
                           type="checkbox"
@@ -1231,7 +1231,7 @@ export default function LeadsView() {
                           <div className="flex flex-wrap gap-1 mt-1">
                             {lead.tags.map((tag, idx) => (
                               <span 
-                                key={idx} 
+                                key={`${tag}-${idx}`} 
                                 className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700/80 border border-indigo-100/50"
                               >
                                 <Tag className="w-2 h-2 text-indigo-400" />
@@ -1585,10 +1585,10 @@ export default function LeadsView() {
                 </div>
               ) : (
                 <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white">
-                  {distinctTagsWithCounts.map(({ name, count }) => {
+                  {distinctTagsWithCounts.map(({ name, count }, idx) => {
                     const isBeingEdited = editingTag === name;
                     return (
-                      <div key={name} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors group">
+                      <div key={`${name || 'tag'}-${idx}`} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                         {isBeingEdited ? (
                           <div className="flex items-center gap-2 w-full animate-in fade-in duration-150">
                             <input

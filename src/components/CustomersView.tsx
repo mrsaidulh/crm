@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Mail, Phone, ExternalLink, ShieldCheck, FileEdit, Calculator, GraduationCap, X, UserSearch } from 'lucide-react';
+import { Mail, Phone, ExternalLink, ShieldCheck, FileEdit, Calculator, GraduationCap, X, UserSearch, Trash2 } from 'lucide-react';
 import type { Lead, MockScore } from '../types';
 import { format } from 'date-fns';
 import CustomerProfileModal from './CustomerProfileModal';
@@ -16,8 +16,27 @@ export default function CustomersView() {
     listening: '', reading: '', writing: '', speaking: ''
   });
 
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
+
+  const handleDeleteStudent = async (id: string) => {
+    if (!isSuperAdmin) {
+      alert('Access Denied: Only a Super Admin is authorized to permanently delete student records.');
+      return;
+    }
+    if (!confirm('Are you absolutely sure you want to permanently delete this student record from leads, test scores, and follow-ups? This action is irreversible.')) return;
+    try {
+      const resp = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
+      if (resp.ok) {
+        setCustomers(prev => prev.filter(c => c.id !== id));
+      } else {
+        alert('Failed to delete student.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error deleting student.');
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -183,6 +202,15 @@ export default function CustomersView() {
                          >
                            Add Mock Score
                          </button>
+                         {isSuperAdmin && (
+                           <button 
+                             onClick={() => handleDeleteStudent(customer.id)}
+                             className="text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg transition-colors border border-red-100 flex items-center justify-center"
+                             title="Delete Student Record"
+                           >
+                             <Trash2 className="w-3.5 h-3.5" />
+                           </button>
+                         )}
                       </td>
                     </tr>
                   )

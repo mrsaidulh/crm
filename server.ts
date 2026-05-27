@@ -568,13 +568,31 @@ app.get('/api/team-members', async (req, res) => {
 
 app.post('/api/team-members', async (req, res) => {
   try {
+    const { name, email, role, password, status } = req.body;
+    
+    // Create team member profile
     const newMember = {
       id: req.body.id || uuidv4(),
       createdAt: req.body.createdAt || Date.now(),
-      status: 'Invited' as const,
-      ...req.body
+      status: status || 'Active', // Directly set Active so they can collaborate
+      name,
+      email,
+      role: role || 'Counselor',
+      userId: req.body.userId || 'ielts_crm_main_user'
     };
+    
     await dbService.insertTeamMember(newMember);
+
+    // Sync credentials to crm_users_auth table so they can log in manually!
+    const uid = 'user_' + Date.now().toString() + Math.random().toString(36).substr(2, 5);
+    await dbService.insertAuthUser({
+      uid,
+      email,
+      displayName: name,
+      password: password || '123456', // default fallback password
+      role: role || 'Counselor'
+    });
+
     res.status(201).json({ teamMember: newMember });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error creating team member' });
@@ -582,9 +600,33 @@ app.post('/api/team-members', async (req, res) => {
 });
 
 app.put('/api/team-members/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email, role, password, status } = req.body;
   try {
-    const updated = await dbService.updateTeamMember(req.params.id, req.body);
+    const updated = await dbService.updateTeamMember(id, { name, email, role, status });
     if (updated) {
+      // Sync change of credentials to crm_users_auth table matching this email
+      const users = await dbService.getAuthUsers();
+      const existingUser = users.find(u => u.email.toLowerCase() === updated.email.toLowerCase() || u.email.toLowerCase() === (email || '').trim().toLowerCase());
+      if (existingUser) {
+        await dbService.insertAuthUser({
+          uid: existingUser.uid,
+          email: updated.email,
+          displayName: updated.name,
+          password: password || existingUser.password || '123456',
+          role: updated.role
+        });
+      } else if (password) {
+        // If password is set but they didn't have auto-provisioned credentials, create them now
+        const uid = 'user_' + Date.now().toString() + Math.random().toString(36).substr(2, 5);
+        await dbService.insertAuthUser({
+          uid: updated.email.includes('saidul') ? 'user_1779881851973fw16q' : uid,
+          email: updated.email,
+          displayName: updated.name,
+          password,
+          role: updated.role
+        });
+      }
       res.json({ teamMember: updated });
     } else {
       res.status(404).json({ error: 'Team member not found' });
@@ -595,8 +637,19 @@ app.put('/api/team-members/:id', async (req, res) => {
 });
 
 app.delete('/api/team-members/:id', async (req, res) => {
+  const { id } = req.params;
   try {
-    const success = await dbService.deleteTeamMember(req.params.id);
+    const teamMembers = await dbService.getTeamMembers();
+    const targeted = teamMembers.find(m => m.id === id);
+    if (targeted) {
+      // Delete their auth credentials from manual table as well
+      const users = await dbService.getAuthUsers();
+      const existingUser = users.find(u => u.email.toLowerCase() === targeted.email.toLowerCase());
+      if (existingUser) {
+        await dbService.deleteAuthUser(existingUser.uid);
+      }
+    }
+    const success = await dbService.deleteTeamMember(id);
     if (success) {
       res.json({ success: true });
     } else {
@@ -604,6 +657,16 @@ app.delete('/api/team-members/:id', async (req, res) => {
     }
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error deleting team member' });
+  }
+});
+
+// Endpoint for Super Admin to wipe all lead data
+app.post('/api/admin/clear-all-leads', async (req, res) => {
+  try {
+    await dbService.clearAllLeads();
+    res.json({ success: true, message: 'All lead, task, and campaign data successfully cleared' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to clear lead files' });
   }
 });
 

@@ -130,7 +130,8 @@ export default function SettingsView() {
   const [memberForm, setMemberForm] = useState({
     name: '',
     email: '',
-    role: 'Counselor' as 'Admin' | 'Counselor' | 'Teacher' | 'Marketing'
+    role: 'Counselor' as 'Super Admin' | 'Admin' | 'Counselor' | 'Teacher' | 'Marketing',
+    password: ''
   });
 
   useEffect(() => {
@@ -215,13 +216,31 @@ export default function SettingsView() {
 
   const openAddMemberModal = () => {
     setEditingMemberId(null);
-    setMemberForm({ name: '', email: '', role: 'Counselor' });
+    setMemberForm({ name: '', email: '', role: 'Counselor', password: '' });
     setIsTeamModalOpen(true);
   };
 
-  const openEditMemberModal = (member: TeamMember) => {
+  const openEditMemberModal = async (member: TeamMember) => {
     setEditingMemberId(member.id);
-    setMemberForm({ name: member.name, email: member.email, role: member.role });
+    let existingPassword = '';
+    try {
+      const response = await fetch('/api/auth/users');
+      if (response.ok) {
+        const data = await response.json();
+        const matched = data.users?.find((u: any) => u.email.toLowerCase() === member.email.toLowerCase());
+        if (matched) {
+          existingPassword = matched.password || '';
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching credentials:', e);
+    }
+    setMemberForm({ 
+      name: member.name, 
+      email: member.email, 
+      role: member.role as any, 
+      password: existingPassword 
+    });
     setIsTeamModalOpen(true);
   };
 
@@ -863,6 +882,48 @@ export default function SettingsView() {
                 </div>
               </div>
 
+              {/* Super Admin Danger Zone */}
+              {isSuperAdmin && (
+                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5">
+                  <h4 className="text-xs font-bold text-rose-800 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                    <Trash2 className="w-4 h-4 text-rose-600 animate-pulse" /> Danger Zone: Permanent Lead Purge
+                  </h4>
+                  <p className="text-xs text-rose-750 leading-relaxed max-w-2xl mb-4">
+                    As Super Admin <strong>Saidul Hasan</strong>, you have high-level permissions to purge previous lead lists, follow-up schedules, and active workflows in memory and MySQL completely. This operation is fully immediate and irreversible.
+                  </p>
+                  <div className="flex items-center gap-3.5">
+                    <button
+                      onClick={async () => {
+                        const verified1 = confirm("⚠️ CRITICAL ACTION ⚠️\n\nAre you absolutely positive you want to completely destroy all previous leads, activity tasks, and marketing schedules across both manual memory caches and the MySQL/cPanel server database?");
+                        if (!verified1) return;
+                        const verified2 = confirm("Confirm once more: This resets previous tables entirely so you start with a 100% clean Slate. Proceed with data deletion?");
+                        if (!verified2) return;
+                        
+                        try {
+                          const response = await fetch('/api/admin/clear-all-leads', { method: 'POST' });
+                          if (response.ok) {
+                            localStorage.setItem('crm_db_leads', JSON.stringify([]));
+                            localStorage.setItem('crm_db_tasks', JSON.stringify([]));
+                            localStorage.setItem('crm_db_campaigns', JSON.stringify([]));
+                            localStorage.setItem('crm_db_audit-logs', JSON.stringify([]));
+                            alert("Lead database wiped pristine! Refreshing...");
+                            window.location.reload();
+                          } else {
+                            alert("Database wipe failed on server. Please check the error logs.");
+                          }
+                        } catch (err: any) {
+                          alert("Network action failure: " + err.message);
+                        }
+                      }}
+                      className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-2 shadow-md hover:shadow-rose-100"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Purge previous Lead & Task Databases
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Advanced Firebase Config Form */}
               <div className="border border-slate-150 rounded-2xl overflow-hidden shadow-sm bg-white">
                 <div className="bg-slate-50 px-5 py-3 border-b border-slate-150 flex items-center justify-between">
@@ -1003,11 +1064,23 @@ export default function SettingsView() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Data Access Role</label>
                 <select required value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value as any})} className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                  <option value="Super Admin">Super Admin (Full System & User Management)</option>
                   <option value="Admin">Admin (Full Access & Settings)</option>
                   <option value="Counselor">Counselor (Leads, Pipeline, Tasks)</option>
                   <option value="Teacher">Teacher (Students, Mock Scores)</option>
                   <option value="Marketing">Marketing (Campaigns, Templates, Forms)</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Login Password</label>
+                <input 
+                  type="text" 
+                  required={!editingMemberId} 
+                  value={memberForm.password || ''} 
+                  onChange={e => setMemberForm({...memberForm, password: e.target.value})} 
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm font-mono" 
+                  placeholder={editingMemberId ? "Leave blank to keep unchanged" : "Set a secure password"} 
+                />
               </div>
 
               <div className="pt-4 flex gap-3">
