@@ -20,110 +20,15 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot' | 'reset'>('signin');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   
-  const { user, loading, signInWithEmail, signUpWithEmail, logOut, forgotPassword, resetPassword } = useAuth();
+  const { user, loading, signInWithEmail, signUpWithEmail, logOut } = useAuth();
   const [showCredPassword, setShowCredPassword] = useState(false);
-
-  // Password reset states
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotMethod, setForgotMethod] = useState<'email' | 'sms'>('email');
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotSuccess, setForgotSuccess] = useState(false);
-  const [activeResetToken, setActiveResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
-  
-  // Real-time server-side messages state for simulator
-  const [allMessages, setAllMessages] = useState<any[]>([]);
-
-  // Check for resetToken in url
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('resetToken');
-    if (t) {
-      setActiveResetToken(t);
-      setAuthMode('reset');
-      
-      // Clear URL bar parameter
-      const cleanUrl = window.location.origin + window.location.pathname;
-      window.history.replaceState(null, '', cleanUrl);
-    }
-  }, []);
-
-  const fetchMockMessages = () => {
-    fetch('/api/auth/mock-messages')
-      .then(res => res.json())
-      .then(data => {
-        if (data.messages) {
-          setAllMessages(data.messages);
-        }
-      })
-      .catch(err => console.warn('Mock messages poll missed:', err));
-  };
-
-  useEffect(() => {
-    fetchMockMessages();
-    const interval = setInterval(fetchMockMessages, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleForgotSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setForgotLoading(true);
-    setForgotSuccess(false);
-    try {
-      await forgotPassword(forgotEmail, forgotMethod);
-      setForgotSuccess(true);
-      fetchMockMessages(); // Refresh list immediately
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Verification initialization failed.');
-    } finally {
-      setForgotLoading(false);
-    }
-  };
-
-  const handleResetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    
-    if (newPassword.length < 6) {
-      setErrorMsg('Password must contain at least 6 characters.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setErrorMsg('Passwords do not match. Please verify confirmations.');
-      return;
-    }
-
-    setResetLoading(true);
-    setResetSuccess(false);
-    try {
-      await resetPassword(activeResetToken, newPassword);
-      setResetSuccess(true);
-      setTimeout(() => {
-        setAuthMode('signin');
-        setResetSuccess(false);
-        setNewPassword('');
-        setConfirmPassword('');
-        setErrorMsg('');
-        setEmail(forgotEmail || email);
-        setPassword('');
-      }, 3000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Error occurred while updating password.');
-    } finally {
-      setResetLoading(false);
-    }
-  };
 
   // 2FA Session Verification and Setup States
   const [mfaSessionVerified, setMfaSessionVerified] = useState(false);
@@ -205,411 +110,99 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 font-sans antialiased text-slate-800 selection:bg-indigo-100">
-        
-        {/* Header container */}
-        <div className="text-center mb-8 max-w-sm">
-          <div className="bg-indigo-100 p-3.5 rounded-2xl inline-flex mb-3 shadow-xs">
-            <GraduationCap className="w-9 h-9 text-indigo-600" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-sm w-full space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-center">
+            <div className="bg-indigo-100 p-3 rounded-xl inline-flex mb-3">
+              <GraduationCap className="w-8 h-8 text-indigo-600" />
+            </div>
+            <h1 className="text-xl font-display font-bold text-slate-900">IELTS Revolution CRM</h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Administrator Access Portal
+            </p>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">IELTS Revolution CRM</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            Core Administrator & Counselor Access Portal
-          </p>
-        </div>
 
-        <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Main Auth Form Card */}
-          <div className="lg:col-span-5 bg-white p-7 rounded-2xl shadow-sm border border-slate-200/80 space-y-5 animate-in fade-in duration-200">
-            <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 block">
-              {authMode === 'signin' && 'Sign In to Portal'}
-              {authMode === 'signup' && 'Register counselor'}
-              {authMode === 'forgot' && 'Identity verification'}
-              {authMode === 'reset' && 'Configure new password'}
-            </h2>
-
-            {/* Master Credentials Alert Panel to help testing */}
-            {authMode === 'signin' && (
-              <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 text-xs space-y-1.5 text-indigo-800">
-                <p className="font-semibold text-indigo-950 border-b border-indigo-100/60 pb-1 mb-1.5 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600" /> Master Credentials
-                </p>
-                <div className="flex justify-between items-center">
-                  <span>Email:</span>
-                  <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">toieltsrevolution@gmail.com</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Password:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">
-                      {showCredPassword ? 'Irevocrm1$%' : '••••••••••••'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowCredPassword(p => !p)}
-                      className="bg-white hover:bg-indigo-50 border border-indigo-150 text-[10px] text-indigo-700 font-bold px-1.5 py-0.5 rounded transition-all shrink-0"
-                    >
-                      {showCredPassword ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {errorMsg && (
-              <div className="bg-red-50 text-red-700 p-3.5 rounded-xl text-xs border border-red-100 font-medium">
-                ⚠️ {errorMsg}
-              </div>
-            )}
-
-            {forgotSuccess && authMode === 'forgot' && (
-              <div className="bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl p-4 text-xs space-y-2">
-                <p className="font-bold">✨ Verification details sent!</p>
-                <p className="font-normal leading-relaxed text-emerald-700">
-                  A verification token has been dispatched. Please view the simulated device stream on the right to verify your identity and click the verification link.
-                </p>
-              </div>
-            )}
-
-            {/* FORM CONDITIONAL RENDERING */}
-            {(authMode === 'signin' || authMode === 'signup') && (
-              <form onSubmit={handleAuthSubmit} className="space-y-4">
-                {authMode === 'signup' && (
-                  <div className="animate-in slide-in-from-top-2 duration-155">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Sarah Smith"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="crm@example.com"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
-                >
-                  {authLoading ? 'Verifying Credentials...' : authMode === 'signin' ? 'Sign In' : 'Register Account'}
-                </button>
-
-                {authMode === 'signin' && (
-                  <div className="flex items-center justify-between text-[11px] font-semibold pt-1 border-t border-slate-100 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthMode('signup');
-                        setErrorMsg('');
-                        setDisplayName('');
-                      }}
-                      className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                    >
-                      Register Account
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthMode('forgot');
-                        setErrorMsg('');
-                        setForgotEmail(email);
-                      }}
-                      className="text-slate-500 hover:text-indigo-600 transition-colors"
-                    >
-                      Forgot Password?
-                    </button>
-                  </div>
-                )}
-
-                {authMode === 'signup' && (
-                  <div className="text-center text-[11px] font-semibold pt-1 border-t border-slate-100 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthMode('signin');
-                        setErrorMsg('');
-                      }}
-                      className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                    >
-                      Already registered? Sign In
-                    </button>
-                  </div>
-                )}
-              </form>
-            )}
-
-            {authMode === 'forgot' && (
-              <form onSubmit={handleForgotSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Registered Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={forgotEmail}
-                    onChange={(e) => {
-                      setForgotEmail(e.target.value);
-                      setErrorMsg('');
-                    }}
-                    placeholder="name@toieltsrevolution.com"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Verification dispatcher mode</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setForgotMethod('email')}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
-                        forgotMethod === 'email'
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs ring-2 ring-indigo-5/40'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100/70'
-                      }`}
-                    >
-                      <MessageSquare className="w-4 h-4 mb-1 text-indigo-600" />
-                      <span className="text-[11px] font-bold">Email Service</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForgotMethod('sms')}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
-                        forgotMethod === 'sms'
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs ring-2 ring-indigo-5/45'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100/70'
-                      }`}
-                    >
-                      <Zap className="w-4 h-4 mb-1 text-violet-600" />
-                      <span className="text-[11px] font-bold">SMS Service</span>
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={forgotLoading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {forgotLoading ? 'Processing Request...' : 'Dispatch Verification Link'}
-                </button>
-
+          <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 text-xs space-y-1.5 text-indigo-800">
+            <p className="font-semibold text-indigo-950 border-b border-indigo-100/60 pb-1 mb-1.5 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" /> Master Credentials
+            </p>
+            <div className="flex justify-between items-center">
+              <span>Email:</span>
+              <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">toieltsrevolution@gmail.com</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Password:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">
+                  {showCredPassword ? 'Irevocrm1$%' : '••••••••••••'}
+                </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setAuthMode('signin');
-                    setErrorMsg('');
-                  }}
-                  className="w-full text-center text-xs text-slate-500 hover:text-slate-800 font-semibold py-1 border-t border-slate-100 pt-3 mt-1"
+                  onClick={() => setShowCredPassword(p => !p)}
+                  className="bg-white hover:bg-indigo-50 border border-indigo-150 text-[10px] text-indigo-700 font-semibold px-1 py-0.5 rounded transition-all shrink-0"
                 >
-                  Back to Sign In
+                  {showCredPassword ? 'Hide' : 'Show'}
                 </button>
-              </form>
-            )}
-
-            {authMode === 'reset' && (
-              <form onSubmit={handleResetSubmit} className="space-y-4">
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-850 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-900">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Security Session Verified
-                  </span>
-                  <p className="font-mono text-[9px] break-all text-emerald-700">
-                    Active Code: {activeResetToken}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={newPassword}
-                    onChange={(e) => {
-                      setNewPassword(e.target.value);
-                      setErrorMsg('');
-                    }}
-                    placeholder="••••••••"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Confirm New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      setErrorMsg('');
-                    }}
-                    placeholder="••••••••"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                {resetSuccess ? (
-                  <div className="bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl p-3.5 text-xs text-center font-bold animate-in zoom-in-95 duration-200">
-                    🎉 Password updated! Redirecting...
-                  </div>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={resetLoading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
-                  >
-                    {resetLoading ? 'Saving Credentials...' : 'Save Password Changes'}
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('signin');
-                    setErrorMsg('');
-                    setConfirmPassword('');
-                    setNewPassword('');
-                  }}
-                  className="w-full text-center text-xs text-slate-500 hover:text-slate-800 font-semibold py-1 border-t border-slate-100 pt-3 mt-1"
-                >
-                  Cancel and Log In
-                </button>
-              </form>
-            )}
-          </div>
-
-          {/* Secure Security Dispatch Simulator panel on the right side */}
-          <div className="lg:col-span-7 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 overflow-hidden shadow-md flex flex-col h-[480px]">
-            {/* Header bar */}
-            <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-xs font-bold font-mono tracking-wide text-slate-300">SECURE DISPATCH SIMULATOR</span>
               </div>
-              <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-400 font-mono px-2 py-0.5 rounded-md font-semibold">
-                MOCK CHANNEL GATEWAY
-              </span>
             </div>
-
-            {/* Simulated message stream container */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 font-sans text-xs">
-              {allMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2 text-slate-550">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-450">
-                    <Timer className="w-5 h-5 flex shrink-0 animate-spin" style={{ animationDuration: '4s' }} />
-                  </div>
-                  <p className="font-semibold text-slate-350">Awaiting Password Reset Trigger</p>
-                  <p className="text-[11px] font-normal text-slate-500 max-w-xs leading-relaxed">
-                    Once you request a password reset, the secure simulated mail dispatcher or cellular SMS transmitter will catch the code links instantly here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {allMessages.slice().reverse().map((msg: any) => {
-                    const isEmail = msg.method === 'email';
-                    return (
-                      <div key={msg.id} className="bg-slate-950/80 border border-slate-800/80 rounded-xl overflow-hidden shadow-xs animate-in slide-in-from-bottom duration-300 font-sans">
-                        
-                        {/* Device Header line */}
-                        <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                          <span className="flex items-center gap-1.5 font-bold text-slate-300 uppercase">
-                            {isEmail ? (
-                              <>
-                                <MessageSquare className="w-3.5 h-3.5 text-indigo-400 font-sans" />
-                                Simulated E-Mail Client
-                              </>
-                            ) : (
-                              <>
-                                <Zap className="w-3.5 h-3.5 text-violet-400 font-sans" />
-                                Simulated iOS / Android Text Device
-                              </>
-                            )}
-                          </span>
-                          <span>{new Date(msg.sentAt).toLocaleTimeString()}</span>
-                        </div>
-
-                        {/* Interactive simulation screen */}
-                        <div className="p-4 space-y-3 font-sans">
-                          {isEmail ? (
-                            <div className="space-y-2 border border-slate-800/60 p-3 bg-slate-950/50 rounded-lg text-[11px] font-sans">
-                              <div><span className="text-slate-500 font-bold font-sans">From:</span> <span className="font-mono text-indigo-300 font-semibold">security@toieltsrevolution.com</span></div>
-                              <div><span className="text-slate-500 font-bold font-sans">To:</span> <span className="font-mono text-slate-350">{msg.email}</span></div>
-                              <div className="border-b border-slate-800/80 my-1.5" />
-                              <div className="font-semibold text-slate-200 font-sans">{msg.subject}</div>
-                              <p className="text-slate-400 leading-relaxed font-normal whitespace-pre-line mt-2 font-sans">
-                                {msg.body}
-                              </p>
-                              <div className="pt-2 font-sans">
-                                <button
-                                  onClick={() => {
-                                    setActiveResetToken(msg.token);
-                                    setAuthMode('reset');
-                                  }}
-                                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition-colors font-sans"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5" /> Click Link to Reset Password
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-end space-y-1 font-sans">
-                              <div className="self-start text-[10px] text-slate-500 font-semibold font-mono pl-1">CRM Secure Carrier Gateway:</div>
-                              <div className="bg-indigo-950 text-white border border-slate-800/80 p-3.5 rounded-2xl rounded-tr-none text-xs font-normal leading-relaxed max-w-[85%] self-end shadow-xs space-y-3 font-sans">
-                                <p className="font-sans">{msg.body}</p>
-                                <div className="text-right font-sans">
-                                  <button
-                                    onClick={() => {
-                                      setActiveResetToken(msg.token);
-                                      setAuthMode('reset');
-                                    }}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] transition-all font-sans"
-                                  >
-                                    Tap Link to Verify Identity
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Small instructions banner at bottom */}
-            <div className="bg-slate-950 p-2.5 text-center border-t border-slate-800 text-[10px] text-slate-500 font-mono tracking-normal leading-normal">
-              Press link inside verification email or text directly to update the manual user registry.
+            <div className="text-[10px] text-indigo-555 font-medium mt-1 text-right">
+              Master Admin: Saidul Hasan
             </div>
           </div>
 
+          {errorMsg && (
+            <div className="bg-red-50 text-red-700 p-3.5 rounded-xl text-xs border border-red-100 font-medium">
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'signup' && (
+              <div className="animate-in slide-in-from-top-2 duration-200">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Sarah Smith"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="crm@example.com"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
+            >
+              {authLoading ? 'Verifying Credentials...' : authMode === 'signin' ? 'Sign In' : 'Register Account'}
+            </button>
+          </form>
         </div>
       </div>
     );

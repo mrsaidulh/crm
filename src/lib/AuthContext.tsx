@@ -19,8 +19,6 @@ interface AuthContextType {
   updateProfile: (displayName: string, email: string, password?: string) => Promise<void>;
   isSuperAdmin: boolean;
   toggleTwoFactor: (enabled: boolean, secret?: string) => Promise<void>;
-  forgotPassword: (email: string, method: 'email' | 'sms') => Promise<{ token: string; email: string; displayName: string; method: 'email' | 'sms' }>;
-  resetPassword: (token: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -32,8 +30,6 @@ const AuthContext = createContext<AuthContextType>({
   updateProfile: async () => {},
   isSuperAdmin: false,
   toggleTwoFactor: async () => {},
-  forgotPassword: async () => ({ token: '', email: '', displayName: '', method: 'email' as const }),
-  resetPassword: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -413,45 +409,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('crm_active_session', JSON.stringify(updatedUser));
   };
 
-  const forgotPassword = async (email: string, method: 'email' | 'sms') => {
-    const response = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, method })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to request password reset.');
-    }
-    return data;
-  };
-
-  const resetPassword = async (token: string, newPassword: string) => {
-    const response = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, newPassword })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to reset password.');
-    }
-
-    // Also update client-side database in localStorage if user exists
-    const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
-    let savedUsers: ManualUser[] = [];
-    try {
-      savedUsers = JSON.parse(savedUsersStr);
-    } catch (e) {}
-
-    const emailClean = data.email.toLowerCase();
-    const idx = savedUsers.findIndex(u => u && u.email && u.email.toLowerCase() === emailClean);
-    if (idx !== -1) {
-      savedUsers[idx].password = newPassword;
-      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
-    }
-  };
-
   const isSuperAdmin = 
     user?.role === 'Super Admin' || 
     user?.email.toLowerCase() === 'toieltsrevolution@gmail.com' || 
@@ -459,7 +416,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user?.email.toLowerCase().includes('saidul');
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithEmail, signUpWithEmail, logOut, updateProfile, isSuperAdmin, toggleTwoFactor, forgotPassword, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, signInWithEmail, signUpWithEmail, logOut, updateProfile, isSuperAdmin, toggleTwoFactor }}>
       {children}
     </AuthContext.Provider>
   );
