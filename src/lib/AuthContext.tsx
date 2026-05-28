@@ -6,6 +6,8 @@ export interface ManualUser {
   displayName: string;
   password?: string;
   role?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
 }
 
 interface AuthContextType {
@@ -16,6 +18,9 @@ interface AuthContextType {
   logOut: () => Promise<void>;
   updateProfile: (displayName: string, email: string, password?: string) => Promise<void>;
   isSuperAdmin: boolean;
+  toggleTwoFactor: (enabled: boolean, secret?: string) => Promise<void>;
+  forgotPassword: (email: string, method: 'email' | 'sms') => Promise<{ token: string; email: string; displayName: string; method: 'email' | 'sms' }>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -26,6 +31,9 @@ const AuthContext = createContext<AuthContextType>({
   logOut: async () => {},
   updateProfile: async () => {},
   isSuperAdmin: false,
+  toggleTwoFactor: async () => {},
+  forgotPassword: async () => ({ token: '', email: '', displayName: '', method: 'email' as const }),
+  resetPassword: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -64,6 +72,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const defaultAdmin: ManualUser = {
         uid: 'ielts_crm_main_user',
         email: 'toieltsrevolution@gmail.com',
+        password: 'Irevocrm1$%',
+        displayName: 'Saidul Hasan',
+        role: 'Super Admin'
+      };
+
+      const defaultAdmin2: ManualUser = {
+        uid: 'user_1779881851973fw16q',
+        email: 'saidulgmac@gmail.com',
         password: 'Irevocrm1$%',
         displayName: 'Saidul Hasan',
         role: 'Super Admin'
@@ -117,6 +133,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated = true;
       }
 
+      const admin2Exists = savedUsers.some(u => u && u.email && u.email.toLowerCase() === defaultAdmin2.email.toLowerCase());
+      if (!admin2Exists) {
+        savedUsers.push(defaultAdmin2);
+        updated = true;
+      }
+
       localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
 
       // 2. Check active session
@@ -145,7 +167,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               uid: matchingUser.uid,
               email: matchingUser.email,
               displayName: matchingUser.displayName,
-              role: matchingUser.role || (matchingUser.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor')
+              role: matchingUser.role || (matchingUser.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor'),
+              twoFactorEnabled: matchingUser.twoFactorEnabled,
+              twoFactorSecret: matchingUser.twoFactorSecret
             };
           }
           setUser(sessionUser);
@@ -183,49 +207,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    let found = savedUsers.find(
+    // Ensure pre-setup super admin accounts are always present in the verification pool
+    const defaultAdmins = [
+      {
+        uid: 'ielts_crm_main_user',
+        email: 'toieltsrevolution@gmail.com',
+        password: 'Irevocrm1$%',
+        displayName: 'Saidul Hasan',
+        role: 'Super Admin'
+      },
+      {
+        uid: 'user_1779881851973fw16q',
+        email: 'saidulgmac@gmail.com',
+        password: 'Irevocrm1$%',
+        displayName: 'Saidul Hasan',
+        role: 'Super Admin'
+      }
+    ];
+
+    defaultAdmins.forEach(admin => {
+      if (!savedUsers.some(u => u && u.email && u.email.toLowerCase() === admin.email.toLowerCase())) {
+        savedUsers.push(admin);
+      }
+    });
+
+    const found = savedUsers.find(
       u => u && u.email && u.email.toLowerCase() === email.trim().toLowerCase()
     );
 
     if (!found) {
-      // Auto register the user to avoid locking them out of the preview
-      const emailLower = email.trim().toLowerCase();
-      let targetUid = 'user_' + Date.now().toString() + Math.random().toString(36).substr(2, 5);
-      
-      if (emailLower === 'mrsaidulvc@gmail.com' || emailLower === 'saidulgmac@gmail.com') {
-        targetUid = 'user_1779881851973fw16q';
-      } else {
-        // Deterministic stable uid fallback so login on a new device yields the exact same uid
-        let hash = 0;
-        for (let i = 0; i < emailLower.length; i++) {
-          const char = emailLower.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash |= 0;
-        }
-        const cleanStr = emailLower.replace(/[^a-z0-9]/g, '');
-        targetUid = `user_stable_${Math.abs(hash)}_${cleanStr.slice(0, 8)}`;
-      }
-
-      found = {
-        uid: targetUid,
-        email: emailLower,
-        password: password,
-        displayName: emailLower.toLowerCase() === 'toieltsrevolution@gmail.com' || emailLower.includes('saidul') ? 'Saidul Hasan' : 'Administrator Name',
-        role: emailLower.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor'
-      };
-      savedUsers.push(found);
-      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
-
-      // Sync newly auto-registered user to server
-      try {
-        await fetch('/api/auth/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(found)
-        });
-      } catch (err) {
-        console.warn('[Sync Auth] Failed to push newly auto-created user to backend server:', err);
-      }
+      throw new Error('Access Denied. This email is not a registered administrator or counselor.');
     }
 
     if (found.password !== password) {
@@ -237,7 +248,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       uid: found.uid,
       email: found.email,
       displayName: found.displayName,
-      role: found.role || (found.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor')
+      role: found.role || (found.email.toLowerCase() === 'toieltsrevolution@gmail.com' ? 'Super Admin' : 'Counselor'),
+      twoFactorEnabled: found.twoFactorEnabled,
+      twoFactorSecret: found.twoFactorSecret
     };
 
     localStorage.setItem('crm_active_session', JSON.stringify(sessionUser));
@@ -358,6 +371,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(updatedSession);
   };
 
+  const toggleTwoFactor = async (enabled: boolean, secret?: string) => {
+    if (!user) return;
+    
+    // Fetch and update local users
+    const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
+    let savedUsers: ManualUser[] = [];
+    try {
+      savedUsers = JSON.parse(savedUsersStr);
+    } catch (e) {}
+
+    const idx = savedUsers.findIndex(u => u && u.email && u.email.toLowerCase() === user.email.toLowerCase());
+    if (idx !== -1) {
+      savedUsers[idx].twoFactorEnabled = enabled;
+      savedUsers[idx].twoFactorSecret = secret || undefined;
+      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
+    }
+    
+    // Update server auth user record
+    try {
+      await fetch('/api/auth/users/update-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          twoFactorEnabled: enabled,
+          twoFactorSecret: secret || ''
+        })
+      });
+    } catch (err) {
+      console.warn('Failed to sync 2FA to server:', err);
+    }
+
+    // Update current context user state
+    const updatedUser: ManualUser = {
+      ...user,
+      twoFactorEnabled: enabled,
+      twoFactorSecret: secret || undefined
+    };
+    setUser(updatedUser);
+    localStorage.setItem('crm_active_session', JSON.stringify(updatedUser));
+  };
+
+  const forgotPassword = async (email: string, method: 'email' | 'sms') => {
+    const response = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, method })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to request password reset.');
+    }
+    return data;
+  };
+
+  const resetPassword = async (token: string, newPassword: string) => {
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to reset password.');
+    }
+
+    // Also update client-side database in localStorage if user exists
+    const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
+    let savedUsers: ManualUser[] = [];
+    try {
+      savedUsers = JSON.parse(savedUsersStr);
+    } catch (e) {}
+
+    const emailClean = data.email.toLowerCase();
+    const idx = savedUsers.findIndex(u => u && u.email && u.email.toLowerCase() === emailClean);
+    if (idx !== -1) {
+      savedUsers[idx].password = newPassword;
+      localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
+    }
+  };
+
   const isSuperAdmin = 
     user?.role === 'Super Admin' || 
     user?.email.toLowerCase() === 'toieltsrevolution@gmail.com' || 
@@ -365,7 +459,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user?.email.toLowerCase().includes('saidul');
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithEmail, signUpWithEmail, logOut, updateProfile, isSuperAdmin }}>
+    <AuthContext.Provider value={{ user, loading, signInWithEmail, signUpWithEmail, logOut, updateProfile, isSuperAdmin, toggleTwoFactor, forgotPassword, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

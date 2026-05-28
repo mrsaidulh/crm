@@ -94,6 +94,8 @@ export interface TeamMember {
   status: 'Active' | 'Invited' | 'Suspended';
   createdAt: number;
   userId: string;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
 }
 
 export interface UserSettings {
@@ -102,6 +104,9 @@ export interface UserSettings {
   smsApiKey?: string;
   smsSenderId?: string;
   smsClientId?: string; // Optional for some providers
+  
+  // Two-Factor Authentication Requirements
+  twoFactorEnforced?: boolean;
   
   // SMTP Configuration
   smtpHost?: string;

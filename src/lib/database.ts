@@ -7,6 +7,8 @@ export interface ManualAuthUser {
   displayName: string;
   password?: string;
   role?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
 }
 
 // hold our in-memory fallback list
@@ -121,7 +123,9 @@ function mapDbRowToUser(r: any): ManualAuthUser {
     email: r.email,
     displayName: r.display_name,
     password: r.password || undefined,
-    role: r.role || 'Counselor'
+    role: r.role || 'Counselor',
+    twoFactorSecret: r.two_factor_secret || undefined,
+    twoFactorEnabled: r.two_factor_enabled === 1 || r.two_factor_enabled === true
   };
 }
 
@@ -163,6 +167,8 @@ try {
             \`display_name\` VARCHAR(255) NOT NULL,
             \`password\` VARCHAR(255) DEFAULT NULL,
             \`role\` VARCHAR(64) DEFAULT 'Counselor',
+            \`two_factor_secret\` VARCHAR(255) DEFAULT NULL,
+            \`two_factor_enabled\` TINYINT DEFAULT 0,
             PRIMARY KEY (\`uid\`),
             UNIQUE KEY \`uniq_email_auth\` (\`email\`)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -174,12 +180,22 @@ try {
         } catch (alterColErr) {
           // Column already exists
         }
+        try {
+          await conn.query("ALTER TABLE `crm_users_auth` ADD COLUMN `two_factor_secret` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {
+          // Column already exists
+        }
+        try {
+          await conn.query("ALTER TABLE `crm_users_auth` ADD COLUMN `two_factor_enabled` TINYINT DEFAULT 0");
+        } catch (alterColErr) {
+          // Column already exists
+        }
 
         // Wipe all previous lead and activity logs data as requested by the user
         await conn.query('DELETE FROM `leads`');
         await conn.query('DELETE FROM `tasks`');
         await conn.query('DELETE FROM `campaigns`');
-        console.log('[MySQL] Auto-initialized crm_users_auth table, added role column, and wiped previous lead/task data successfully.');
+        console.log('[MySQL] Auto-initialized crm_users_auth table, added safety Columns, and wiped previous lead/task data successfully.');
       } catch (tableErr: any) {
         console.warn('[MySQL] Failed to auto-create and alter tables or wipe previous data:', tableErr.message);
       }
@@ -1008,8 +1024,16 @@ export const dbService = {
   async insertAuthUser(u: ManualAuthUser): Promise<void> {
     if (pool) {
       try {
-        const sql = `INSERT INTO crm_users_auth (uid, email, display_name, password, role) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), password = VALUES(password), role = VALUES(role)`;
-        await pool.execute(sql, [u.uid, u.email.toLowerCase(), u.displayName, u.password || null, u.role || 'Counselor']);
+        const sql = `INSERT INTO crm_users_auth (uid, email, display_name, password, role, two_factor_secret, two_factor_enabled) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), password = VALUES(password), role = VALUES(role), two_factor_secret = VALUES(two_factor_secret), two_factor_enabled = VALUES(two_factor_enabled)`;
+        await pool.execute(sql, [
+          u.uid, 
+          u.email.toLowerCase(), 
+          u.displayName, 
+          u.password || null, 
+          u.role || 'Counselor',
+          u.twoFactorSecret || null,
+          u.twoFactorEnabled ? 1 : 0
+        ]);
         return;
       } catch (err) {
         console.error('[MySQL] insertAuthUser failed:', err);
