@@ -121,6 +121,9 @@ export interface UserSettings {
   n8nLeadCreatedUrl?: string;
   n8nStatusChangedUrl?: string;
   n8nTaskReminderUrl?: string;
+  
+  // Custom Lead Sources
+  customSources?: string[];
 }
 
 export interface WorkflowRule {

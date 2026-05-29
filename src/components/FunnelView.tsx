@@ -81,14 +81,17 @@ export default function FunnelView() {
 
             const colors = STATUS_COLORS[status];
             const isTargetColumn = dragOverStatus === status;
+            const isAnyCardDragging = draggingLeadId !== null;
 
             return (
               <div 
                 key={status} 
-                className={`w-full md:w-[290px] bg-slate-50/90 rounded-2xl flex flex-col shrink-0 border transition-all duration-300 relative ${
+                className={`w-full md:w-[290px] rounded-2xl flex flex-col shrink-0 border transition-all duration-300 relative ${
                   isTargetColumn 
-                    ? 'border-indigo-400 bg-indigo-50/35 ring-4 ring-indigo-500/5 shadow-md scale-[1.01]' 
-                    : 'border-slate-200/90 shadow-xs'
+                    ? 'border-indigo-400 bg-indigo-50/60 ring-4 ring-indigo-500/10 shadow-md scale-[1.01]' 
+                    : isAnyCardDragging
+                      ? 'border-dashed border-slate-300 bg-slate-50/40 opacity-85'
+                      : 'border-slate-200/90 bg-slate-50/90 shadow-xs'
                 }`}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -117,7 +120,7 @@ export default function FunnelView() {
                 }}
               >
                 {/* Visual accent bar */}
-                <span className={`absolute left-0 top-0 bottom-0 md:bottom-auto md:right-0 md:h-[4px] w-[5px] md:w-full transition-all duration-300 ${colors.accent}`} />
+                <span className={`absolute left-0 top-0 bottom-0 md:bottom-auto md:right-0 md:h-[4px] w-[5px] md:w-full transition-all duration-300 ${isTargetColumn ? 'bg-indigo-500 h-[6px]' : colors.accent}`} />
                 
                 <div className="p-4 pl-6 md:pl-4 border-b border-slate-200/60 flex items-center justify-between bg-slate-50/40 rounded-t-2xl shrink-0">
                   <div className="flex items-center gap-2">
@@ -147,11 +150,26 @@ export default function FunnelView() {
                             onDragEnd={() => {
                               setDraggingLeadId(null);
                             }}
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: isBeingDragged ? 0.35 : 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                            className={`bg-white p-3.5 rounded-xl shadow-xs border transition-colors relative group cursor-grab active:cursor-grabbing ${
+                            initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                            animate={{ 
+                              opacity: isBeingDragged ? 0.35 : 1, 
+                              scale: isBeingDragged ? 0.95 : 1, 
+                              y: 0 
+                            }}
+                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                            whileHover={{ 
+                              y: -3, 
+                              scale: 1.015, 
+                              boxShadow: "0 10px 15px -3px rgba(99, 102, 241, 0.08), 0 4px 6px -2px rgba(99, 102, 241, 0.02)" 
+                            }}
+                            whileTap={{ scale: 0.98 }}
+                            transition={{ 
+                              type: "spring", 
+                              stiffness: 300, 
+                              damping: 25,
+                              layout: { type: "spring", stiffness: 350, damping: 28 }
+                            }}
+                            className={`bg-white p-3.5 rounded-xl border transition-colors relative group cursor-grab active:cursor-grabbing ${
                               isBeingDragged
                                 ? 'border-dashed border-indigo-400 bg-indigo-50/10'
                                 : 'border-slate-200/80 hover:border-slate-300 hover:shadow-xs'

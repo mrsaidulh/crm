@@ -215,6 +215,19 @@ export default function LeadsView() {
   const { user, isSuperAdmin } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
 
+  const [customSources, setCustomSources] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/settings?userId=${encodeURIComponent(userId)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.settings && Array.isArray(data.settings.customSources)) {
+          setCustomSources(data.settings.customSources);
+        }
+      })
+      .catch(error => console.error('Error fetching settings in LeadsView:', error));
+  }, [userId]);
+
   useEffect(() => {
     setLoading(true);
     fetch(`/api/leads?userId=${encodeURIComponent(userId)}`)
@@ -988,6 +1001,9 @@ export default function LeadsView() {
                 <option value="Website Form">Website Form</option>
                 <option value="Direct">Direct</option>
                 <option value="Referral">Referral</option>
+                {customSources.map(src => (
+                  <option key={src} value={src}>{src}</option>
+                ))}
                 <option value="Others">Others</option>
               </select>
             </div>
@@ -1406,7 +1422,7 @@ export default function LeadsView() {
                 <select 
                   value={formData.source}
                   onChange={(e) => setFormData({ ...formData, source: e.target.value as LeadSource })}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-505 bg-white font-medium"
                 >
                   <option value="Facebook Ads">Facebook Ads</option>
                   <option value="Google Ads">Google Ads</option>
@@ -1414,6 +1430,9 @@ export default function LeadsView() {
                   <option value="Website Form">Website Form</option>
                   <option value="Direct">Direct</option>
                   <option value="Referral">Referral</option>
+                  {customSources.map(src => (
+                    <option key={src} value={src}>{src}</option>
+                  ))}
                   <option value="Others">Others</option>
                 </select>
               </div>

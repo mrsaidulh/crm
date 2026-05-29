@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Shield, Bell, Key, Save, AlertCircle, Users, Plus, Edit2, Trash2, KeyRound, Database, CheckCircle2, ServerCrash, Cpu, Activity, Cloud, RefreshCw, Power, ShieldAlert, Lock, Unlock, Timer, Check, Copy } from 'lucide-react';
+import { User, Shield, Bell, Key, Save, AlertCircle, Users, Plus, Edit2, Trash2, KeyRound, Database, CheckCircle2, ServerCrash, Cpu, Activity, Cloud, RefreshCw, Power, ShieldAlert, Lock, Unlock, Timer, Check, Copy, Tag } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { TOTP } from 'totp-generator';
 import type { UserSettings, TeamMember } from '../types';
 import { useAuth } from '../lib/AuthContext';
 import { firebaseService, initFirebase, disconnectFirebase } from '../lib/firebaseService';
 
-type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'database';
+type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'database';
 
 export default function SettingsView() {
   const { user, updateProfile, isSuperAdmin, toggleTwoFactor } = useAuth();
@@ -41,6 +41,61 @@ export default function SettingsView() {
   // Database Connection Status State
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config: { host: string; port: number; user: string; database: string } } | null>(null);
   const [fetchingDbStatus, setFetchingDbStatus] = useState(false);
+
+  // Custom Lead Sources helper states
+  const [newCustomSource, setNewCustomSource] = useState('');
+  const [sourcesSaving, setSourcesSaving] = useState(false);
+  const [sourcesMessage, setSourcesMessage] = useState('');
+
+  const addCustomSource = () => {
+    const trimmed = newCustomSource.trim();
+    if (!trimmed) return;
+    
+    const defaults = ['Facebook Ads', 'Google Ads', 'Youtube Ads', 'Website Form', 'Direct', 'Referral', 'Others'];
+    const currentCustom = settings.customSources || [];
+    
+    if (defaults.some(d => d.toLowerCase() === trimmed.toLowerCase()) || currentCustom.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      alert('This lead source name already exists.');
+      return;
+    }
+    
+    setSettings(prev => ({
+      ...prev,
+      customSources: [...(prev.customSources || []), trimmed]
+    }));
+    setNewCustomSource('');
+  };
+
+  const removeCustomSource = (sourceToRemove: string) => {
+    setSettings(prev => ({
+      ...prev,
+      customSources: (prev.customSources || []).filter(s => s !== sourceToRemove)
+    }));
+  };
+
+  const handleSaveSources = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSourcesSaving(true);
+    setSourcesMessage('');
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          settings: settings
+        })
+      });
+      setSourcesMessage('Lead sources updated and saved successfully!');
+      setTimeout(() => setSourcesMessage(''), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setSourcesMessage('Error saving custom lead sources.');
+    } finally {
+      setSourcesSaving(false);
+    }
+  };
 
   // Dynamic Firebase inputs connection states
   const [fbApiKey, setFbApiKey] = useState('');
@@ -408,6 +463,9 @@ export default function SettingsView() {
           </button>
           <button onClick={() => setActiveTab('api_keys')} className={navItemClass('api_keys')}>
             <Key className="w-4 h-4" /> Integrations & API
+          </button>
+          <button onClick={() => setActiveTab('sources')} className={navItemClass('sources')}>
+            <Tag className="w-4 h-4" /> Custom Lead Sources
           </button>
           <button onClick={() => setActiveTab('database')} className={navItemClass('database')}>
             <Database className="w-4 h-4" /> Database Status
@@ -1255,6 +1313,113 @@ export default function SettingsView() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'sources' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in duration-350 space-y-6">
+              <div className="border-b border-slate-100 pb-4">
+                <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-indigo-600" />
+                  Lead Sources Configuration
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">Define custom channels where your students and prospective international candidates discover your programs.</p>
+              </div>
+
+              {/* Add Custom Source form */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4">
+                <h3 className="font-semibold text-xs text-slate-800 uppercase tracking-wider">Add New Channel / Lead Source</h3>
+                
+                <div className="flex gap-2.5">
+                  <input
+                    type="text"
+                    value={newCustomSource}
+                    onChange={(e) => setNewCustomSource(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomSource();
+                      }
+                    }}
+                    placeholder="e.g. LinkedIn Ads, Partner Agency, Instagram Organic"
+                    className="flex-1 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomSource}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Add Channel
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">Press enter or click Add Channel to enqueue the source. Make sure to click save below to finalize changes.</p>
+              </div>
+
+              {/* Active Channels List split by type */}
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Your custom Lead Sources</h4>
+                  {(settings.customSources && settings.customSources.length > 0) ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {settings.customSources.map((source, index) => (
+                        <div key={`custom-${source}-${index}`} className="flex items-center justify-between p-3.5 bg-indigo-50/20 border border-indigo-100/70 rounded-xl hover:border-indigo-200 transition-all shadow-xs group">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                            <span className="text-sm font-medium text-slate-800 truncate">{source}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCustomSource(source)}
+                            className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Remove source"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center p-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/30">
+                      <Tag className="w-5 h-5 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs text-slate-500 font-medium">No custom lead sources configured yet.</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Use the inputs form above to supplement default channels.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Immutable System Default Channels</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    {['Facebook Ads', 'Google Ads', 'Youtube Ads', 'Website Form', 'Direct', 'Referral', 'Others'].map((defSource) => (
+                      <div key={defSource} className="px-3 py-2 bg-slate-50 border border-slate-250 rounded-lg text-slate-500 font-medium flex items-center justify-between">
+                        <span>{defSource}</span>
+                        <span className="text-[9px] bg-slate-200 text-slate-550 font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Core</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action save bar */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  {sourcesMessage && (
+                    <span className="text-xs font-semibold text-emerald-600 animate-pulse bg-emerald-50 border border-emerald-150 px-3 py-1.5 rounded-lg">
+                      {sourcesMessage}
+                    </span>
+                  )}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handleSaveSources}
+                  disabled={sourcesSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                >
+                  <Save className="w-4 h-4" />
+                  {sourcesSaving ? 'Saving...' : 'Save Lead Sources'}
+                </button>
+              </div>
             </div>
           )}
 
