@@ -1,13 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { format, subDays, isSameDay } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
-import type { Lead, Stats } from '../types';
+import type { Lead, Stats, Task } from '../types';
+import { logAuditEvent } from '../utils/auditLogger';
 import { Server, WifiOff, AlertTriangle, RefreshCw, Key, HelpCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config?: any; error?: string } | null>(null);
@@ -51,19 +54,31 @@ export default function Dashboard() {
   const loadDashboardData = () => {
     setLoading(true);
     setError(null);
-    fetch(`/api/leads?userId=${encodeURIComponent(userId)}`)
-      .then(async res => {
-        if (!res.ok) {
-          const body = await res.text();
+    Promise.all([
+      fetch(`/api/leads?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/tasks?userId=${encodeURIComponent(userId)}`)
+    ])
+      .then(async ([leadsRes, tasksRes]) => {
+        if (!leadsRes.ok) {
+          const body = await leadsRes.text();
           let parsed;
           try { parsed = JSON.parse(body); } catch (_) {}
-          throw new Error(parsed?.error || parsed?.message || body || `Server error ${res.status}`);
+          throw new Error(parsed?.error || parsed?.message || body || `Leads API error ${leadsRes.status}`);
         }
-        return res.json();
+        if (!tasksRes.ok) {
+          const body = await tasksRes.text();
+          let parsed;
+          try { parsed = JSON.parse(body); } catch (_) {}
+          throw new Error(parsed?.error || parsed?.message || body || `Tasks API error ${tasksRes.status}`);
+        }
+        return Promise.all([leadsRes.json(), tasksRes.json()]);
       })
-      .then(data => {
-        if (data && data.leads) {
-          setLeads(data.leads);
+      .then(([leadsData, tasksData]) => {
+        if (leadsData && leadsData.leads) {
+          setLeads(leadsData.leads);
+        }
+        if (tasksData && tasksData.tasks) {
+          setTasks(tasksData.tasks);
         }
       })
       .catch(err => {
@@ -161,6 +176,39 @@ export default function Dashboard() {
       conversionValue
     };
   }, [filteredLeads]);
+
+  const tasksDueToday = useMemo(() => {
+    return tasks.filter(task => isSameDay(new Date(task.dueDate), new Date()));
+  }, [tasks]);
+
+  const todayTasksStats = useMemo(() => {
+    const total = tasksDueToday.length;
+    const completed = tasksDueToday.filter(t => t.status === 'Completed').length;
+    const pending = tasksDueToday.filter(t => t.status === 'Pending').length;
+    return { total, completed, pending };
+  }, [tasksDueToday]);
+
+  const handleToggleTaskStatus = async (task: Task) => {
+    const newStatus = task.status === 'Pending' ? 'Completed' : 'Pending';
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (response.ok) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+        logAuditEvent({
+          action: newStatus === 'Completed' ? 'Task Completed' : 'Task Reopened',
+          entityType: 'task',
+          entityId: task.id,
+          details: `Task "${task.title}" associated with lead "${task.leadName || 'Unknown'}" was updated via Daily Digest on Dashboard.`
+        });
+      }
+    } catch (e) {
+      console.error('Failed to toggle task status:', e);
+    }
+  };
 
   if (loading) {
     return (
@@ -377,14 +425,110 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Daily Digest Dashboard Section */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-950/40 rounded-2xl p-5 text-white shadow-sm space-y-4 animate-in fade-in duration-300">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <span className="bg-indigo-500/10 text-indigo-300 text-[10px] uppercase tracking-widest font-extrabold px-2.5 py-1 rounded-full border border-indigo-500/20 inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+              Daily Digest
+            </span>
+            <h2 className="text-base font-bold font-display tracking-tight flex items-center gap-2">
+              Today's Overview for {user?.email || 'Administrator'}
+            </h2>
+            <p className="text-indigo-200/80 text-xs">
+              Keep track of your operations. Here are your high-priority items due on {format(new Date(), 'EEEE, MMMM d, yyyy')}.
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center min-w-[100px] backdrop-blur-xs">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Pending</div>
+              <div className="text-xl font-bold font-display text-rose-400 mt-0.5">{todayTasksStats.pending}</div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center min-w-[100px] backdrop-blur-xs">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Completed</div>
+              <div className="text-xl font-bold font-display text-emerald-400 mt-0.5">{todayTasksStats.completed}</div>
+            </div>
+            <div className="bg-indigo-500/20 border border-indigo-400/20 rounded-xl p-3 text-center min-w-[110px] backdrop-blur-xs">
+              <div className="text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">Completion Rate</div>
+              <div className="text-xl font-bold font-display text-indigo-200 mt-0.5">
+                {todayTasksStats.total > 0 
+                  ? `${Math.round((todayTasksStats.completed / todayTasksStats.total) * 100)}%` 
+                  : '100%'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {tasksDueToday.length > 0 ? (
+          <div className="border-t border-white/10 pt-3.5 space-y-2.5">
+            <h3 className="text-slate-300 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+              <ClipboardList className="w-3.5 h-3.5 text-indigo-400" />
+              Today's Agenda checklist ({tasksDueToday.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {tasksDueToday.map(task => {
+                const isCompleted = task.status === 'Completed';
+                return (
+                  <div
+                    key={task.id}
+                    className={`p-3 rounded-xl border flex items-start gap-2.5 transition-all ${
+                      isCompleted
+                        ? 'bg-white/5 border-white/5 text-slate-400 line-through'
+                        : 'bg-white/10 border-white/15 hover:border-indigo-400/50 hover:bg-white/15 text-white'
+                    }`}
+                  >
+                    <button
+                      onClick={() => handleToggleTaskStatus(task)}
+                      className="mt-0.5 text-slate-400 hover:text-white shrink-0 transition-colors cursor-pointer"
+                      title={isCompleted ? "Reopen task" : "Mark task as completed"}
+                    >
+                      {isCompleted ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-300 hover:text-white" />
+                      )}
+                    </button>
+                    <div className="flex-grow min-w-0">
+                      <div className="font-semibold text-xs leading-normal truncate">{task.title}</div>
+                      {task.leadName && (
+                        <div className="text-[9px] text-indigo-300/80 mt-0.5 font-medium truncate">Lead: {task.leadName}</div>
+                      )}
+                    </div>
+                    {task.taskType && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0 ${
+                        task.taskType === 'Call'
+                          ? 'bg-green-500/20 text-green-300 border border-green-500/20'
+                          : task.taskType === 'Meeting'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/20'
+                          : task.taskType === 'Email'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/20'
+                          : 'bg-slate-500/20 text-slate-300 border border-slate-500/20'
+                      }`}>
+                        {task.taskType}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="border-t border-white/5 pt-3 text-slate-400 text-xs italic flex items-center gap-2">
+            <CheckSquare className="w-4 h-4 text-emerald-400" />
+            Fantastic! You don't have any tasks scheduled for today. You're completely caught up!
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-6 md:grid-cols-3 gap-3 md:gap-4">
-        <StatCard title="Total Leads" value={stats.totalLeads} icon={<Users className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
-        <StatCard title="Pipeline Value" value={`$${stats.estimatedPipelineValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-amber-600" bg="bg-amber-100" />
-        <StatCard title="Conversion Val." value={`$${stats.conversionValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-emerald-600" bg="bg-emerald-100" />
-        <StatCard title="New Leads" value={stats.newLeads} icon={<UserPlus className="w-5 h-5" />} color="text-indigo-600" bg="bg-indigo-100" />
-        <StatCard title="Enrolled" value={stats.enrolled} icon={<CheckCircle className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
-        <StatCard title="Conversion %" value={`${stats.conversionRate}%`} icon={<TrendingUp className="w-5 h-5" />} color="text-purple-600" bg="bg-purple-100" />
+        <StatCard index={0} title="Total Leads" value={stats.totalLeads} icon={<Users className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
+        <StatCard index={1} title="Pipeline Value" value={`$${stats.estimatedPipelineValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-amber-600" bg="bg-amber-100" />
+        <StatCard index={2} title="Conversion Val." value={`$${stats.conversionValue.toLocaleString()}`} icon={<TrendingUp className="w-5 h-5" />} color="text-emerald-600" bg="bg-emerald-100" />
+        <StatCard index={3} title="New Leads" value={stats.newLeads} icon={<UserPlus className="w-5 h-5" />} color="text-indigo-600" bg="bg-indigo-100" />
+        <StatCard index={4} title="Enrolled" value={stats.enrolled} icon={<CheckCircle className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
+        <StatCard index={5} title="Conversion %" value={`${stats.conversionRate}%`} icon={<TrendingUp className="w-5 h-5" />} color="text-purple-600" bg="bg-purple-100" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -457,9 +601,14 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value, icon, color, bg }: { title: string, value: string | number, icon: React.ReactNode, color: string, bg: string }) {
+function StatCard({ title, value, icon, color, bg, index = 0 }: { title: string, value: string | number, icon: React.ReactNode, color: string, bg: string, index?: number }) {
   return (
-    <div className="bg-white p-3.5 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between gap-2 overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: index * 0.08, ease: "easeOut" }}
+      className="bg-white p-3.5 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between gap-2 overflow-hidden"
+    >
       <div className="min-w-0">
         <p className="text-[11px] sm:text-xs md:text-sm font-medium text-slate-500 truncate">{title}</p>
         <p className="text-lg sm:text-2xl md:text-3xl font-display font-semibold text-slate-900 mt-0.5 sm:mt-1 truncate">{value}</p>
@@ -467,7 +616,7 @@ function StatCard({ title, value, icon, color, bg }: { title: string, value: str
       <div className={`${bg} ${color} w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shrink-0`}>
         {icon}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

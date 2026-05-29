@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { format, isBefore, startOfDay, addDays } from 'date-fns';
+import { 
+  format, 
+  isBefore, 
+  startOfDay, 
+  addDays,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  addMonths,
+  subMonths
+} from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
-import { CheckSquare, Circle, MoreHorizontal, Calendar, Search, Plus, Trash2, Edit2, AlertCircle, Phone, MessageSquare, Briefcase, User, Bell, Send, X } from 'lucide-react';
+import { CheckSquare, Circle, MoreHorizontal, Calendar, Search, Plus, Trash2, Edit2, AlertCircle, AlertTriangle, Phone, MessageSquare, Briefcase, User, Bell, Send, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Task, Lead, TeamMember } from '../types';
 import { triggerGlobalWebhook } from '../utils/automation';
 import { logAuditEvent } from '../utils/auditLogger';
@@ -12,6 +26,10 @@ export default function TasksView() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -144,6 +162,20 @@ export default function TasksView() {
   const openAddModal = () => {
     setEditingTaskId(null);
     setFormData({ title: '', description: '', leadId: '', dueDate: format(new Date(), 'yyyy-MM-dd'), taskType: 'General', assignee: '', reminderDate: '' });
+    setIsModalOpen(true);
+  };
+
+  const openAddModalWithDate = (date: Date) => {
+    setEditingTaskId(null);
+    setFormData({ 
+      title: '', 
+      description: '', 
+      leadId: '', 
+      dueDate: format(date, 'yyyy-MM-dd'), 
+      taskType: 'General', 
+      assignee: '', 
+      reminderDate: '' 
+    });
     setIsModalOpen(true);
   };
 
@@ -321,161 +353,491 @@ export default function TasksView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-4">
-          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Upcoming & Overdue</h2>
-          {loading ? (
-             <div className="text-slate-500 p-4 border border-slate-200 rounded-xl bg-white shadow-sm animate-pulse">Loading tasks...</div>
-          ) : pendingTasks.length === 0 ? (
-             <div className="text-slate-400 p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-sm bg-slate-50/50">
-               No pending tasks. You're all caught up!
-             </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingTasks.map(task => {
-                const isOverdue = isBefore(new Date(task.dueDate), today);
-                const isToday = task.dueDate === today.getTime();
-                let dateColor = 'text-slate-500';
-                if (isOverdue) dateColor = 'text-red-500 font-semibold';
-                else if (isToday) dateColor = 'text-amber-600 font-semibold';
-                
-                const TypeIcon = task.taskType === 'Meeting' ? Briefcase : task.taskType === 'Call' ? Phone : task.taskType === 'Email' ? MessageSquare : CheckSquare;
+      {/* View Tabs Selector */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('list')}
+          className={`px-4 py-2 border-b-2 font-semibold text-sm transition-colors flex items-center gap-2 cursor-pointer ${
+            activeTab === 'list'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <CheckSquare className="w-4 h-4" />
+          List View
+        </button>
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`px-4 py-2 border-b-2 font-semibold text-sm transition-colors flex items-center gap-2 cursor-pointer ${
+            activeTab === 'calendar'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Calendar View
+        </button>
+      </div>
 
-                return (
-                  <div 
-                    key={task.id} 
-                    onClick={() => {
-                      setSelectedTaskForDetails(task);
-                      setIsDetailsModalOpen(true);
-                    }}
-                    className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:border-indigo-200 transition-colors group cursor-pointer"
-                  >
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStatusChange(task);
+      {activeTab === 'list' ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Upcoming & Overdue</h2>
+            {loading ? (
+               <div className="text-slate-500 p-4 border border-slate-200 rounded-xl bg-white shadow-sm animate-pulse">Loading tasks...</div>
+            ) : pendingTasks.length === 0 ? (
+               <div className="text-slate-400 p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-sm bg-slate-50/50">
+                 No pending tasks. You're all caught up!
+               </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingTasks.map(task => {
+                  const taskDueDate = startOfDay(new Date(task.dueDate));
+                  const isOverdue = isBefore(taskDueDate, today);
+                  const isToday = task.dueDate === today.getTime();
+                  let dateColor = 'text-slate-500';
+                  if (isOverdue) dateColor = 'text-red-600 font-bold';
+                  else if (isToday) dateColor = 'text-amber-600 font-semibold';
+                  
+                  const TypeIcon = task.taskType === 'Meeting' ? Briefcase : task.taskType === 'Call' ? Phone : task.taskType === 'Email' ? MessageSquare : CheckSquare;
+
+                  return (
+                    <div 
+                      key={task.id} 
+                      onClick={() => {
+                        setSelectedTaskForDetails(task);
+                        setIsDetailsModalOpen(true);
                       }}
-                      className="mt-0.5 text-slate-300 hover:text-emerald-500 transition-colors shrink-0"
-                      title="Mark as completed"
+                      className={`rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:border-indigo-200 transition-colors group cursor-pointer ${
+                        isOverdue 
+                          ? 'bg-red-50/25 border-red-200 hover:border-red-300' 
+                          : 'bg-white border-slate-200'
+                      }`}
                     >
-                      <Circle className="w-6 h-6" />
-                    </button>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                           <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
-                             <TypeIcon className="w-4 h-4" />
-                           </div>
-                           <h3 className="font-semibold text-slate-900 text-sm">{task.title}</h3>
-                        </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditModal(task);
-                            }} 
-                            className="text-slate-400 hover:text-indigo-600"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(task.id);
-                            }} 
-                            className="text-slate-400 hover:text-red-600"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusChange(task);
+                        }}
+                        className="mt-0.5 text-slate-300 hover:text-emerald-500 transition-colors shrink-0"
+                        title="Mark as completed"
+                      >
+                        <Circle className="w-6 h-6" />
+                      </button>
                       
-                      {task.description && <p className="mt-1 text-slate-600 text-xs line-clamp-2 pr-8">{task.description}</p>}
-                      
-                      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-medium">
-                        <span className={`flex items-center gap-1.5 ${dateColor}`}>
-                           {isOverdue && <AlertCircle className="w-3.5 h-3.5" />}
-                           {!isOverdue && <Calendar className="w-3.5 h-3.5" />}
-                           {isToday ? 'Today' : isOverdue ? 'Overdue: ' + format(task.dueDate, 'MMM d') : format(task.dueDate, 'MMM d, yyyy')}
-                        </span>
-
-                        {task.reminderDate && (
-                          <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
-                            <Bell className="w-3 h-3 text-amber-500" />
-                            Reminder set: {format(new Date(task.reminderDate), 'MMM d')}
-                          </span>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                             <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
+                               <TypeIcon className="w-4 h-4" />
+                             </div>
+                             <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                               {task.title}
+                               {isOverdue && (
+                                 <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 animate-pulse">
+                                   <AlertTriangle className="w-3 h-3" /> Overdue
+                                 </span>
+                               )}
+                             </h3>
+                          </div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(task);
+                              }} 
+                              className="text-slate-400 hover:text-indigo-600"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(task.id);
+                              }} 
+                              className="text-slate-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                         
-                        {task.leadName && (
-                          <span className="flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                            Lead: {task.leadName}
+                        {task.description && <p className="mt-1 text-slate-600 text-xs line-clamp-2 pr-8">{task.description}</p>}
+                        
+                        <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-medium">
+                          <span className={`flex items-center gap-1.5 ${dateColor}`}>
+                             {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                             {!isOverdue && <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                             {isToday ? 'Today' : isOverdue ? 'Overdue: ' + format(task.dueDate, 'MMM d') : format(task.dueDate, 'MMM d, yyyy')}
                           </span>
-                        )}
 
-                        {task.assignee && (
-                          <span className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                            <User className="w-3 h-3" /> Assigned to: {teamMembers.find(t => t.id === task.assignee)?.name || 'Unknown'}
-                          </span>
-                        )}
+                          {task.reminderDate && (
+                            <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                              <Bell className="w-3 h-3 text-amber-500" />
+                              Reminder set: {format(new Date(task.reminderDate), 'MMM d')}
+                            </span>
+                          )}
+                          
+                          {task.leadName && (
+                            <span className="flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                              Lead: {task.leadName}
+                            </span>
+                          )}
 
-                        {task.comments && task.comments.length > 0 && (
-                          <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 font-semibold shadow-2xs">
-                            <MessageSquare className="w-3 h-3 text-emerald-500" />
-                            {task.comments.length} note{task.comments.length === 1 ? '' : 's'}
-                          </span>
-                        )}
+                          {task.assignee && (
+                            <span className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                              <User className="w-3 h-3" /> Assigned to: {teamMembers.find(t => t.id === task.assignee)?.name || 'Unknown'}
+                            </span>
+                          )}
+
+                          {task.comments && task.comments.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 font-semibold shadow-2xs">
+                              <MessageSquare className="w-3 h-3 text-emerald-500" />
+                              {task.comments.length} note{task.comments.length === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-        <div>
-          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Completed</h2>
-          <div className="space-y-3">
-             {completedTasks.length === 0 ? (
-               <p className="text-xs text-slate-400">No completed tasks yet.</p>
-             ) : (
-                completedTasks.map(task => (
-                  <div 
-                    key={task.id} 
-                    onClick={() => {
-                      setSelectedTaskForDetails(task);
-                      setIsDetailsModalOpen(true);
-                    }}
-                    className="flex items-start gap-3 py-2 px-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
-                  >
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStatusChange(task);
-                      }} 
-                      className="text-emerald-500 mt-0.5 shrink-0" 
-                      title="Reopen task"
+          <div>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Completed</h2>
+            <div className="space-y-3">
+               {completedTasks.length === 0 ? (
+                 <p className="text-xs text-slate-400">No completed tasks yet.</p>
+               ) : (
+                  completedTasks.map(task => (
+                    <div 
+                      key={task.id} 
+                      onClick={() => {
+                        setSelectedTaskForDetails(task);
+                        setIsDetailsModalOpen(true);
+                      }}
+                      className="flex items-start gap-3 py-2 px-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
                     >
-                      <CheckSquare className="w-4 h-4" />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-500 line-through truncate group-hover:text-slate-950 transition-colors flex items-center justify-between gap-2">
-                        <span>{task.title}</span>
-                        {task.comments && task.comments.length > 0 && (
-                          <span className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">
-                            <MessageSquare className="w-2.5 h-2.5 text-emerald-500" /> {task.comments.length}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">For {task.leadName}</p>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusChange(task);
+                        }} 
+                        className="text-emerald-500 mt-0.5 shrink-0" 
+                        title="Reopen task"
+                      >
+                        <CheckSquare className="w-4 h-4" />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-500 line-through truncate group-hover:text-slate-950 transition-colors flex items-center justify-between gap-2">
+                          <span>{task.title}</span>
+                          {task.comments && task.comments.length > 0 && (
+                            <span className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">
+                              <MessageSquare className="w-2.5 h-2.5 text-emerald-500" /> {task.comments.length}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">For {task.leadName}</p>
+                      </div>
                     </div>
-                  </div>
-                ))
-             )}
+                  ))
+               )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar main panel (lg:col-span-2) */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in fade-in duration-300">
+            
+            {/* Calendar Month Header with action tools */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-bold text-slate-900 capitalize">
+                  {format(currentMonth, 'MMMM yyyy')}
+                </h3>
+                <div className="flex items-center border border-slate-200 rounded-lg shadow-2xs">
+                  <button
+                    onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}
+                    className="p-1.5 hover:bg-slate-50 text-slate-500 hover:text-slate-800 border-r border-slate-200 transition-colors cursor-pointer"
+                    title="Previous Month"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentMonth(new Date());
+                      setSelectedDate(new Date());
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 text-slate-600 hover:text-slate-900 border-r border-slate-200 transition-colors cursor-pointer"
+                    title="Jump to current Month"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}
+                    className="p-1.5 hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                    title="Next Month"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Status indicators and quick sums */}
+              <div className="flex gap-4 text-xs font-medium text-slate-500">
+                <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold border border-indigo-100">
+                  <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                  {tasks.filter(t => t.status === 'Pending' && isSameMonth(new Date(t.dueDate), currentMonth)).length} Pending
+                </span>
+                <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-semibold border border-emerald-100">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                  {tasks.filter(t => t.status === 'Completed' && isSameMonth(new Date(t.dueDate), currentMonth)).length} Completed
+                </span>
+              </div>
+            </div>
+
+            {/* Calendar Grid UI */}
+            <div className="space-y-2">
+              {/* Day names headers of columns */}
+              <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-1 uppercase tracking-wider">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="py-1">{d}</div>
+                ))}
+              </div>
+
+              {/* Day cell grid box */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {(() => {
+                  const firstDay = startOfMonth(currentMonth);
+                  const lastDay = endOfMonth(currentMonth);
+                  const startWeek = startOfWeek(firstDay, { weekStartsOn: 0 });
+                  const endWeek = endOfWeek(lastDay, { weekStartsOn: 0 });
+                  const dayCalendarList = eachDayOfInterval({ start: startWeek, end: endWeek });
+
+                  return dayCalendarList.map((day) => {
+                    const isTodayCell = isSameDay(day, new Date());
+                    const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
+                    const isCurrentM = isSameMonth(day, currentMonth);
+                    const dayTasks = tasks.filter(t => isSameDay(new Date(t.dueDate), day));
+                    const pendingDayTasks = dayTasks.filter(t => t.status === 'Pending');
+
+                    return (
+                      <div
+                        key={day.toString()}
+                        onClick={() => setSelectedDate(day)}
+                        className={`min-h-[95px] p-2 border rounded-xl flex flex-col justify-between transition-all cursor-pointer relative ${
+                          isCurrentM 
+                            ? 'bg-white hover:border-indigo-300' 
+                            : 'bg-slate-50/50 text-slate-400 border-slate-100/75 hover:bg-slate-100/40'
+                        } ${
+                          isSelected 
+                            ? 'ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/10' 
+                            : isTodayCell 
+                            ? 'border-indigo-200 bg-indigo-50/20 font-bold' 
+                            : 'border-slate-100'
+                        }`}
+                      >
+                        {/* Day indicator number */}
+                        <div className="flex items-center justify-between pb-1">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            isTodayCell 
+                              ? 'bg-indigo-600 text-white font-extrabold shadow-3xs' 
+                              : isSelected
+                              ? 'text-indigo-700 font-bold bg-indigo-100/50'
+                              : isCurrentM 
+                              ? 'text-slate-800 font-medium' 
+                              : 'text-slate-400 font-normal'
+                          }`}>
+                            {format(day, 'd')}
+                          </span>
+                          
+                          {pendingDayTasks.length > 0 && (
+                            <span className={`w-1.5 h-1.5 rounded-full ${isTodayCell ? 'bg-indigo-600' : 'bg-rose-500 animate-pulse'}`} />
+                          )}
+                        </div>
+
+                        {/* List nested micro cards */}
+                        <div className="flex-1 mt-1 space-y-1 overflow-auto max-h-[62px]">
+                          {dayTasks.slice(0, 3).map(task => {
+                            const isTaskPending = task.status === 'Pending';
+                            let variantColor = '';
+                            if (!isTaskPending) {
+                              variantColor = 'bg-slate-100 hover:bg-slate-200 text-slate-400 line-through border-slate-200';
+                            } else if (task.taskType === 'Call') {
+                              variantColor = 'bg-green-50 hover:bg-green-100 text-green-700 border-green-100';
+                            } else if (task.taskType === 'Meeting') {
+                              variantColor = 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-100';
+                            } else if (task.taskType === 'Email') {
+                              variantColor = 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-100';
+                            } else {
+                              variantColor = 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-100';
+                            }
+
+                            return (
+                              <div
+                                key={task.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTaskForDetails(task);
+                                  setIsDetailsModalOpen(true);
+                                }}
+                                className={`text-[10px] py-0.5 px-1.5 font-semibold rounded border truncate transition-colors ${variantColor}`}
+                                title={`${task.title} [${task.taskType}] - Click to view detail`}
+                              >
+                                {task.title}
+                              </div>
+                            );
+                          })}
+                          {dayTasks.length > 3 && (
+                            <div className="text-[9px] font-bold text-indigo-600 text-center bg-indigo-50/50 py-0.5 rounded border border-indigo-150">
+                              +{dayTasks.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column agenda panel */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-start">
+            <div className="border-b border-rose-100 pb-3 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-600" />
+                  Agenda Focus
+                </h3>
+                <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                  {selectedDate ? format(selectedDate, 'EEEE, MMMM d, yyyy') : 'No Date Chosen'}
+                </p>
+              </div>
+              {selectedDate && (
+                <button
+                  onClick={() => openAddModalWithDate(selectedDate)}
+                  className="bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-semibold flex items-center gap-1.5 p-1.5 px-3 rounded-lg text-xs transition-colors cursor-pointer"
+                  title="Add Task for Selected Date"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add
+                </button>
+              )}
+            </div>
+
+            {/* Day Agenda Tasks Content List */}
+            {selectedDate && (() => {
+              const dayTasks = tasks.filter(t => isSameDay(new Date(t.dueDate), selectedDate));
+              const dayPending = dayTasks.filter(t => t.status === 'Pending');
+              const dayCompleted = dayTasks.filter(t => t.status === 'Completed');
+
+              if (dayTasks.length === 0) {
+                return (
+                  <div className="py-8 text-center space-y-3">
+                    <p className="text-slate-400 text-xs italic">No follow-ups or tasks scheduled for this date.</p>
+                    <button
+                      onClick={() => openAddModalWithDate(selectedDate)}
+                      className="inline-flex items-center gap-1.5 bg-indigo-600 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors hover:bg-indigo-700 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Create first Task
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
+                  {dayPending.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Daily Checklist</h4>
+                      <div className="space-y-2">
+                        {dayPending.map(task => {
+                          const TypeIcon = task.taskType === 'Meeting' ? Briefcase : task.taskType === 'Call' ? Phone : task.taskType === 'Email' ? MessageSquare : CheckSquare;
+                          return (
+                            <div 
+                              key={task.id}
+                              onClick={() => {
+                                setSelectedTaskForDetails(task);
+                                setIsDetailsModalOpen(true);
+                              }}
+                              className="bg-white border border-slate-150 hover:border-indigo-300 p-3 rounded-xl shadow-3xs flex items-center gap-3 cursor-pointer group transition-colors"
+                            >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusChange(task);
+                                }}
+                                className="text-slate-300 hover:text-emerald-500 shrink-0 cursor-pointer"
+                                title="Check Task Done"
+                              >
+                                <Circle className="w-5 h-5" />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-semibold text-slate-800 text-xs truncate">{task.title}</h5>
+                                <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-semibold mt-0.5">
+                                  <TypeIcon className="w-3 h-3 text-indigo-500" />
+                                  <span>{task.taskType}</span>
+                                  {task.leadName && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate">{task.leadName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {dayCompleted.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Completed checklist</h4>
+                      <div className="space-y-2">
+                        {dayCompleted.map(task => {
+                          return (
+                            <div 
+                              key={task.id}
+                              onClick={() => {
+                                setSelectedTaskForDetails(task);
+                                setIsDetailsModalOpen(true);
+                              }}
+                              className="bg-slate-100 border border-slate-200/50 p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition-colors"
+                            >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusChange(task);
+                                }}
+                                className="text-emerald-500 shrink-0 cursor-pointer"
+                                title="Reopen Task"
+                              >
+                                <CheckSquare className="w-4 h-4" />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-semibold text-slate-400 text-xs truncate line-through">{task.title}</h5>
+                                {task.leadName && (
+                                  <p className="text-[9px] text-slate-400 font-medium truncate mt-0.5">For {task.leadName}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -663,11 +1025,14 @@ export default function TasksView() {
                 
                 <div className="flex items-center justify-between text-sm py-1">
                   <span className="text-slate-500 font-medium">Due Date:</span>
-                  <span className={`font-semibold ${
-                    isBefore(new Date(selectedTaskForDetails.dueDate), startOfDay(new Date())) && selectedTaskForDetails.status === 'Pending'
+                  <span className={`font-semibold flex items-center gap-1.5 ${
+                    isBefore(startOfDay(new Date(selectedTaskForDetails.dueDate)), startOfDay(new Date())) && selectedTaskForDetails.status === 'Pending'
                       ? 'text-red-600 font-bold'
                       : 'text-slate-800'
                   }`}>
+                    {isBefore(startOfDay(new Date(selectedTaskForDetails.dueDate)), startOfDay(new Date())) && selectedTaskForDetails.status === 'Pending' && (
+                      <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse shrink-0" />
+                    )}
                     {format(new Date(selectedTaskForDetails.dueDate), 'MMMM d, yyyy')}
                   </span>
                 </div>
