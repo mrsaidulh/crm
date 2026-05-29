@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Shield, Bell, Key, Save, AlertCircle, Users, Plus, Edit2, Trash2, KeyRound, Database, CheckCircle2, ServerCrash, Cpu, Activity, Cloud, RefreshCw, Power, ShieldAlert, Lock, Unlock, Timer, Check, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { TOTP } from 'totp-generator';
 import type { UserSettings, TeamMember } from '../types';
 import { useAuth } from '../lib/AuthContext';
 import { firebaseService, initFirebase, disconnectFirebase } from '../lib/firebaseService';
@@ -24,6 +26,17 @@ export default function SettingsView() {
   const [mfaSuccessMessage, setMfaSuccessMessage] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [resettingUserEmail, setResettingUserEmail] = useState<string | null>(null);
+  const [currentOtp, setCurrentOtp] = useState('');
+
+  useEffect(() => {
+    if (mfaSetupSecret) {
+      TOTP.generate(mfaSetupSecret)
+        .then(res => setCurrentOtp(res.otp))
+        .catch(err => console.error('Error generating OTP in settings:', err));
+    } else {
+      setCurrentOtp('');
+    }
+  }, [mfaSetupSecret, timeRemaining]);
   
   // Database Connection Status State
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config: { host: string; port: number; user: string; database: string } } | null>(null);
@@ -201,48 +214,13 @@ export default function SettingsView() {
     }
   };
 
-  const calculateSimulatedTOTP = (secret: string): string => {
-    const timeBlock = Math.floor(Date.now() / 30000);
-    const str = `${secret}_${timeBlock}`;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-       hash = (hash << 5) - hash + str.charCodeAt(i);
-       hash = hash & hash;
-    }
-    const cleanNum = Math.abs(hash) % 1000000;
-    return cleanNum.toString().padStart(6, '0');
-  };
-
   const drawSimulatedQrCode = (email: string, secret: string) => {
+    const issuer = 'Lead CRM Portal';
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
     return (
-      <svg viewBox="0 0 100 100" className="w-28 h-28 mx-auto bg-white p-2 border border-slate-200 rounded-xl shadow-xs">
-        <rect x="0" y="0" width="100" height="100" fill="none" />
-        <rect x="5" y="5" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-        <rect x="10" y="10" width="10" height="10" fill="white" />
-        <rect x="12" y="12" width="6" height="6" fill="#1e1b4b" />
-        
-        <rect x="75" y="5" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-        <rect x="80" y="10" width="10" height="10" fill="white" />
-        <rect x="82" y="12" width="6" height="6" fill="#1e1b4b" />
-
-        <rect x="5" y="75" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-        <rect x="10" y="80" width="10" height="10" fill="white" />
-        <rect x="12" y="82" width="6" height="6" fill="#1e1b4b" />
-
-        <rect x="40" y="15" width="4" height="4" fill="#312e81" />
-        <rect x="44" y="32" width="8" height="4" fill="#4f46e5" />
-        <rect x="60" y="20" width="4" height="8" fill="#1e1b4b" />
-        <rect x="35" y="55" width="12" height="4" fill="#4f46e5" />
-        <rect x="68" y="68" width="8" height="8" fill="#312e81" />
-        <rect x="55" y="45" width="14" height="6" fill="#1e1b4b" />
-        <rect x="80" y="40" width="6" height="12" fill="#4f46e5" />
-        <rect x="40" y="80" width="12" height="6" fill="#312e81" />
-        <rect x="15" y="40" width="8" height="8" fill="#1e1b4b" />
-        
-        <rect x="50" y="50" width="4" height="4" fill="#312e81" />
-        <rect x="58" y="58" width="6" height="6" fill="#4f46e5" />
-        <rect x="80" y="80" width="10" height="10" fill="#1e1b4b" />
-      </svg>
+      <div className="bg-white p-1 border border-slate-200 rounded-xl shadow-xs inline-block">
+        <QRCodeSVG value={otpauthUrl} size={112} className="mx-auto" />
+      </div>
     );
   };
 
@@ -737,7 +715,7 @@ export default function SettingsView() {
                           </p>
                           <div className="flex items-center gap-3 mt-1.5">
                             <kbd className="bg-amber-100 border border-amber-300 font-mono text-amber-950 font-bold px-3 py-1 rounded text-sm tracking-wider select-all">
-                              {calculateSimulatedTOTP(mfaSetupSecret)}
+                              {currentOtp || '------'}
                             </kbd>
                             <span className="text-[10px] text-amber-600 font-semibold uppercase tracking-wider">
                               Regenerates in {timeRemaining}s
@@ -790,7 +768,7 @@ export default function SettingsView() {
                           <div>
                             <span className="font-bold block text-amber-900">MFA Testing Passcode:</span>
                             <span className="font-mono text-lg font-bold text-amber-955 tracking-wider">
-                              {calculateSimulatedTOTP(mfaSetupSecret)}
+                              {currentOtp || '------'}
                             </span>
                           </div>
                           <span className="text-[10px] text-amber-600 font-semibold uppercase tracking-wider text-right">
@@ -810,15 +788,20 @@ export default function SettingsView() {
                           </button>
                           <button
                             onClick={async () => {
-                              const cleanPasscode = calculateSimulatedTOTP(mfaSetupSecret);
-                              if (verificationInput === cleanPasscode || verificationInput === '777888') { // Support master bypass for testing ease
-                                await toggleTwoFactor(true, mfaSetupSecret);
-                                setMfaSuccessMessage('MFA Successfully configured & activated!');
-                                setIsConfiguringMfa(false);
-                                setSaveMessage('2FA Activated.');
-                                setTimeout(() => setSaveMessage(''), 3000);
-                              } else {
-                                setMfaErrorMessage('Invalid passcode string. Please view code or await regeneration.');
+                              try {
+                                const totpRes = await TOTP.generate(mfaSetupSecret);
+                                const cleanPasscode = totpRes.otp;
+                                if (verificationInput === cleanPasscode || verificationInput === '777888') { // Support master bypass for testing ease
+                                  await toggleTwoFactor(true, mfaSetupSecret);
+                                  setMfaSuccessMessage('MFA Successfully configured & activated!');
+                                  setIsConfiguringMfa(false);
+                                  setSaveMessage('2FA Activated.');
+                                  setTimeout(() => setSaveMessage(''), 3000);
+                                } else {
+                                  setMfaErrorMessage('Invalid passcode string. Please view code or await regeneration.');
+                                }
+                              } catch (e: any) {
+                                setMfaErrorMessage(`Error checking passcode: ${e.message}`);
                               }
                             }}
                             className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-xs"

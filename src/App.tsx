@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, MessageSquare, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck, ShieldAlert, Lock, Unlock, Timer, Check, Copy, KeyRound } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { TOTP } from 'totp-generator';
 import Dashboard from './components/Dashboard';
 import LeadsView from './components/LeadsView';
 import FunnelView from './components/FunnelView';
@@ -40,6 +42,8 @@ export default function App() {
   const [enrollStep, setEnrollStep] = useState(1);
   const [enrollError, setEnrollError] = useState('');
   const [enrollInput, setEnrollInput] = useState('');
+  const [activeUserOtp, setActiveUserOtp] = useState('');
+  const [enrollOtp, setEnrollOtp] = useState('');
 
   // Countdown clock for dynamic assistance preview
   useEffect(() => {
@@ -73,17 +77,25 @@ export default function App() {
       .catch(err => console.warn('Failed to load global settings in App:', err));
   }, [user]);
 
-  const calculateSimulatedTOTP = (secret: string): string => {
-    const timeBlock = Math.floor(Date.now() / 30000);
-    const str = `${secret || ''}_${timeBlock}`;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash = hash & hash;
+  useEffect(() => {
+    if (user?.twoFactorSecret) {
+      TOTP.generate(user.twoFactorSecret)
+        .then(res => setActiveUserOtp(res.otp))
+        .catch(err => console.error('Error generating user OTP', err));
+    } else {
+      setActiveUserOtp('');
     }
-    const cleanNum = Math.abs(hash) % 1000000;
-    return cleanNum.toString().padStart(6, '0');
-  };
+  }, [user?.twoFactorSecret, mfaTimeRemaining]);
+
+  useEffect(() => {
+    if (enrollSecret) {
+      TOTP.generate(enrollSecret)
+        .then(res => setEnrollOtp(res.otp))
+        .catch(err => console.error('Error generating enroll OTP', err));
+    } else {
+      setEnrollOtp('');
+    }
+  }, [enrollSecret, mfaTimeRemaining]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,15 +226,21 @@ export default function App() {
   
   if (is2faActive && !mfaSessionVerified) {
     // Show 2FA passcode input barrier
-    const expectedOtp = calculateSimulatedTOTP(user.twoFactorSecret || '');
-    const handleVerifyOtpSubmit = (e: React.FormEvent) => {
+    const expectedOtp = activeUserOtp;
+    const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setMfaError('');
-      if (mfaVerificationInput === expectedOtp || mfaVerificationInput === '777888') {
-        sessionStorage.setItem(`mfa_verified_${user.uid}`, 'true');
-        setMfaSessionVerified(true);
-      } else {
-        setMfaError('Incorrect passcode. Please view calculated token block or await renewal.');
+      try {
+        const totpRes = await TOTP.generate(user.twoFactorSecret || '');
+        const currentRealOtp = totpRes.otp;
+        if (mfaVerificationInput === currentRealOtp || mfaVerificationInput === '777888') {
+          sessionStorage.setItem(`mfa_verified_${user.uid}`, 'true');
+          setMfaSessionVerified(true);
+        } else {
+          setMfaError('Incorrect passcode. Please view calculated token block or await renewal.');
+        }
+      } catch (err: any) {
+        setMfaError(`Error verifying passcode: ${err.message}`);
       }
     };
 
@@ -313,52 +331,58 @@ export default function App() {
       setEnrollSecret(generated);
     }
     
-    const expectedEnrollOtp = calculateSimulatedTOTP(enrollSecret);
+    const expectedEnrollOtp = enrollOtp;
     const handleEnrollVerifySubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setEnrollError('');
-      if (enrollInput === expectedEnrollOtp || enrollInput === '777888') {
-        try {
-          // Push 2FA to user's profile and database
-          const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
-          let savedUsers: any[] = [];
+      try {
+        const totpRes = await TOTP.generate(enrollSecret);
+        const currentRealOtp = totpRes.otp;
+        if (enrollInput === currentRealOtp || enrollInput === '777888') {
           try {
-            savedUsers = JSON.parse(savedUsersStr);
-          } catch(e) {}
-          
-          const idx = savedUsers.findIndex(u => u && u.email && u.email.toLowerCase() === user.email.toLowerCase());
-          if (idx !== -1) {
-            savedUsers[idx].twoFactorEnabled = true;
-            savedUsers[idx].twoFactorSecret = enrollSecret;
-            localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
-          }
+            // Push 2FA to user's profile and database
+            const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
+            let savedUsers: any[] = [];
+            try {
+              savedUsers = JSON.parse(savedUsersStr);
+            } catch(e) {}
+            
+            const idx = savedUsers.findIndex(u => u && u.email && u.email.toLowerCase() === user.email.toLowerCase());
+            if (idx !== -1) {
+              savedUsers[idx].twoFactorEnabled = true;
+              savedUsers[idx].twoFactorSecret = enrollSecret;
+              localStorage.setItem('crm_users_db', JSON.stringify(savedUsers));
+            }
 
-          await fetch('/api/auth/users/update-2fa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: user.email,
+            await fetch('/api/auth/users/update-2fa', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: user.email,
+                twoFactorEnabled: true,
+                twoFactorSecret: enrollSecret
+              })
+            });
+
+            // Update active session user as well
+            const updatedUser = {
+              ...user,
               twoFactorEnabled: true,
               twoFactorSecret: enrollSecret
-            })
-          });
-
-          // Update active session user as well
-          const updatedUser = {
-            ...user,
-            twoFactorEnabled: true,
-            twoFactorSecret: enrollSecret
-          };
-          localStorage.setItem('crm_active_session', JSON.stringify(updatedUser));
-          sessionStorage.setItem(`mfa_verified_${user.uid}`, 'true');
-          
-          // Fast refresh context user state
-          window.location.reload();
-        } catch (err: any) {
-          setEnrollError(`Error storing 2FA credentials: ${err.message}`);
+            };
+            localStorage.setItem('crm_active_session', JSON.stringify(updatedUser));
+            sessionStorage.setItem(`mfa_verified_${user.uid}`, 'true');
+            
+            // Fast refresh context user state
+            window.location.reload();
+          } catch (err: any) {
+            setEnrollError(`Error storing 2FA credentials: ${err.message}`);
+          }
+        } else {
+          setEnrollError('Invalid code. Please specify correct authenticator value or check timer status.');
         }
-      } else {
-        setEnrollError('Invalid code. Please specify correct authenticator value or check timer status.');
+      } catch (err: any) {
+        setEnrollError(`Error checking passcode: ${err.message}`);
       }
     };
 
@@ -380,26 +404,11 @@ export default function App() {
               <div className="space-y-4">
                 <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 flex flex-col md:flex-row items-center gap-4">
                   <div className="bg-white p-2 border border-slate-200 rounded-xl">
-                    <svg viewBox="0 0 100 100" className="w-24 h-24">
-                      {/* Position detection corners */}
-                      <rect x="5" y="5" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-                      <rect x="10" y="10" width="10" height="10" fill="white" />
-                      <rect x="12" y="12" width="6" height="6" fill="#1e1b4b" />
-                      
-                      <rect x="75" y="5" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-                      <rect x="80" y="10" width="10" height="10" fill="white" />
-                      <rect x="82" y="12" width="6" height="6" fill="#1e1b4b" />
-
-                      <rect x="5" y="75" width="20" height="20" fill="#1e1b4b" stroke="#4f46e5" strokeWidth="2" />
-                      <rect x="10" y="80" width="10" height="10" fill="white" />
-                      <rect x="12" y="82" width="6" height="6" fill="#1e1b4b" />
-
-                      {/* Random alignments */}
-                      <rect x="40" y="15" width="4" height="4" fill="#312e81" />
-                      <rect x="44" y="32" width="8" height="4" fill="#4f46e5" />
-                      <rect x="65" y="65" width="8" height="8" fill="#1e1b4b" />
-                      <rect x="35" y="50" width="10" height="4" fill="#4f46e5" />
-                    </svg>
+                    {(() => {
+                      const issuer = 'Lead CRM Portal';
+                      const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(user?.email || 'crm@user.com')}?secret=${enrollSecret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+                      return <QRCodeSVG value={otpauthUrl} size={84} className="mx-auto" />;
+                    })()}
                   </div>
                   <div className="space-y-1 text-left">
                     <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Step 1: Scan QR Code</h4>
