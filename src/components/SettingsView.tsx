@@ -5,8 +5,9 @@ import { TOTP } from 'totp-generator';
 import type { UserSettings, TeamMember } from '../types';
 import { useAuth } from '../lib/AuthContext';
 import { firebaseService, initFirebase, disconnectFirebase } from '../lib/firebaseService';
+import { triggerWebhookProxy } from '../utils/automation';
 
-type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'database';
+type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'n8n' | 'database';
 
 export default function SettingsView() {
   const { user, updateProfile, isSuperAdmin, toggleTwoFactor } = useAuth();
@@ -46,6 +47,88 @@ export default function SettingsView() {
   const [newCustomSource, setNewCustomSource] = useState('');
   const [sourcesSaving, setSourcesSaving] = useState(false);
   const [sourcesMessage, setSourcesMessage] = useState('');
+
+  // n8n Webhook Testing states
+  const [testResults, setTestResults] = useState<Record<string, { status: 'idle' | 'success' | 'error' | 'loading'; message?: string }>>({
+    created: { status: 'idle' },
+    status: { status: 'idle' },
+    reminder: { status: 'idle' }
+  });
+
+  const handleTestWebhook = async (type: 'created' | 'status' | 'reminder', url: string | undefined) => {
+    if (!url || !url.trim()) {
+      alert('Please enter a webhook URL first before sending a test.');
+      return;
+    }
+    
+    setTestResults(prev => ({
+      ...prev,
+      [type]: { status: 'loading', message: 'Sending mock automation payload...' }
+    }));
+
+    let eventStr = '';
+    let mockPayload: any = {};
+
+    if (type === 'created') {
+      eventStr = 'Lead Created';
+      mockPayload = {
+        id: 'lead_test_101',
+        name: 'Jane Miller',
+        email: 'janemiller@ieltsrev.com',
+        phone: '+8801712345678',
+        source: 'Facebook Ads',
+        status: 'New',
+        createdAt: Date.now(),
+        notes: 'Interested in IELTS Premium Academic. Prefers evening online sessions.'
+      };
+    } else if (type === 'status') {
+      eventStr = 'Lead Status Changed';
+      mockPayload = {
+        id: 'lead_test_101',
+        name: 'Alex Mercer',
+        email: 'alex.mercer@gmail.com',
+        phone: '+8801911112233',
+        source: 'Website Form',
+        status: 'Contacted',
+        previousStatus: 'New',
+        createdAt: Date.now() - 86400000,
+        notes: 'Candidate changed status to Contacted.'
+      };
+    } else {
+      eventStr = 'Task Reminder';
+      mockPayload = {
+        id: 'task_test_202',
+        leadId: 'lead_test_101',
+        leadName: 'Alex Mercer',
+        title: 'Call Candidate to Schedule Consultation Slot',
+        description: 'Discuss available online/hybrid slots and target score goals.',
+        dueDate: Date.now() + 18000000,
+        status: 'Pending',
+        taskType: 'Call'
+      };
+    }
+
+    try {
+      const success = await triggerWebhookProxy(url.trim(), eventStr, mockPayload);
+      if (success) {
+        setTestResults(prev => ({
+          ...prev,
+          [type]: { status: 'success', message: 'Success! Webhook responded with 200 OK' }
+        }));
+      } else {
+        setTestResults(prev => ({
+          ...prev,
+          [type]: { status: 'error', message: 'Failed: n8n webhook responded with non-200 code' }
+        }));
+      }
+    } catch (err: any) {
+      console.error(err);
+      setTestResults(prev => ({
+        ...prev,
+        [type]: { status: 'error', message: `Execution failed: ${err.message || 'CORS/Proxy Error'}` }
+      }));
+    }
+  };
 
   const addCustomSource = () => {
     const trimmed = newCustomSource.trim();
@@ -463,6 +546,9 @@ export default function SettingsView() {
           </button>
           <button onClick={() => setActiveTab('api_keys')} className={navItemClass('api_keys')}>
             <Key className="w-4 h-4" /> Integrations & API
+          </button>
+          <button onClick={() => setActiveTab('n8n')} className={navItemClass('n8n')}>
+            <Cpu className="w-4 h-4 text-orange-500" /> n8n Automation
           </button>
           <button onClick={() => setActiveTab('sources')} className={navItemClass('sources')}>
             <Tag className="w-4 h-4" /> Custom Lead Sources
@@ -1199,99 +1285,23 @@ export default function SettingsView() {
                 </div>
 
                 <div className="pt-6 border-t border-slate-100">
-                  <h3 className="font-semibold text-slate-850 text-sm flex items-center gap-2 mb-4">
-                    <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                      <Save className="w-3.5 h-3.5" />
+                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5">
+                        <Cpu className="w-4 h-4 text-orange-500 animate-pulse" />
+                        Dedicated n8n Automation Hub
+                      </h4>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-lg">
+                        We have migrated and upgraded the webhook parameters into a dedicated workspace. Manage endpoints, view sample payloads, and execute live testing triggers from the new action center.
+                      </p>
                     </div>
-                    n8n Automation Webhooks
-                  </h3>
-                  <p className="text-slate-500 text-xs mb-4">
-                    Define target URLs that n8n will listen to. When events happen, we will automatically forward a full JSON payload of user and item data to your n8n workflows through our secure server proxy. This completely avoids browser CORS issues!
-                  </p>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5 flex justify-between">
-                        <span>Lead Created Webhook URL</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded font-mono">POST Payload: Lead context</span>
-                      </label>
-                      <input 
-                        type="url" 
-                        value={settings.n8nLeadCreatedUrl || ''}
-                        onChange={(e) => setSettings({ ...settings, n8nLeadCreatedUrl: e.target.value })}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans"
-                        placeholder="https://your-n8n-domain.com/webhook/lead-created-event"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5 flex justify-between">
-                        <span>Lead Status Changed Webhook URL</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded font-mono">POST Payload: Modified Lead context</span>
-                      </label>
-                      <input 
-                        type="url" 
-                        value={settings.n8nStatusChangedUrl || ''}
-                        onChange={(e) => setSettings({ ...settings, n8nStatusChangedUrl: e.target.value })}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans"
-                        placeholder="https://your-n8n-domain.com/webhook/status-changed-event"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5 flex justify-between">
-                        <span>Task Reminder Webhook URL</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded font-mono">POST Payload: Task context</span>
-                      </label>
-                      <input 
-                        type="url" 
-                        value={settings.n8nTaskReminderUrl || ''}
-                        onChange={(e) => setSettings({ ...settings, n8nTaskReminderUrl: e.target.value })}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans"
-                        placeholder="https://your-n8n-domain.com/webhook/task-reminder-event"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Interactive Integration Guide */}
-                <div className="pt-6 border-t border-slate-100">
-                  <div className="bg-indigo-50/50 rounded-2xl p-6 border border-indigo-100 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                        n8n
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-slate-900 text-sm">Interactive n8n WhatsApp & Automation Guide</h4>
-                        <p className="text-slate-500 text-xs">Configure your n8n workflow nodes matching this structure</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 text-xs text-slate-600 mt-2">
-                      <div className="flex gap-2.5 items-start">
-                        <span className="w-5 h-5 bg-indigo-100 text-indigo-700 font-bold rounded-full flex items-center justify-center shrink-0">1</span>
-                        <div>
-                          <p className="font-bold text-slate-800">Add Webhook Node in n8n</p>
-                          <p className="mt-0.5">Create a **Webhook** node in your n8n editor set to HTTP Method: <strong>POST</strong> and Response Mode: <strong>On Received</strong>. Copy the webhook URL and paste it in the fields above.</p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2.5 items-start">
-                        <span className="w-5 h-5 bg-indigo-100 text-indigo-700 font-bold rounded-full flex items-center justify-center shrink-0">2</span>
-                        <div>
-                          <p className="font-bold text-slate-800">Trigger WhatsApp Notifications & SMS</p>
-                          <p className="mt-0.5">Connect the Webhook Node to a WhatsApp (Twilio, Vonage, or direct API integration) or email dispatch node. Use the incoming webhook variables, e.g. <code>{"{{ $json.data.phone }}"}</code> and <code>{"{{ $json.data.name }}"}</code> directly in message templates!</p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2.5 items-start">
-                        <span className="w-5 h-5 bg-indigo-100 text-indigo-700 font-bold rounded-full flex items-center justify-center shrink-0">3</span>
-                        <div>
-                          <p className="font-bold text-slate-800">Test Live Triggering</p>
-                          <p className="mt-0.5">Click "Listen for test event" inside n8n, then perform an action (like adding a lead or scheduling a reminder) in this CRM. It will instantly send a live test payload to your n8n canvas!</p>
-                        </div>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('n8n')}
+                      className="text-xs bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2 rounded-xl transition-all shadow-xs shrink-0 self-end sm:self-auto"
+                    >
+                      Open n8n Workspace →
+                    </button>
                   </div>
                 </div>
 
@@ -1420,6 +1430,238 @@ export default function SettingsView() {
                   {sourcesSaving ? 'Saving...' : 'Save Lead Sources'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'n8n' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in duration-350 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <Cpu className="w-5 h-5 text-indigo-600 animate-pulse" />
+                    n8n Webhook Management Hub
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Connect and test your n8n webhook workflows for full pipeline automation.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-xl text-orange-800 font-semibold shadow-xs animate-pulse">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full" />
+                  n8n Native Event Proxy
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-50/20 to-white border border-indigo-100/40 rounded-2xl p-5 space-y-4">
+                <p className="text-slate-600 text-xs leading-relaxed">
+                  Enhance your sales CRM with automated messaging campaigns! Paste webhook URLs copied from your <strong>n8n editor canvas</strong>. When relevant events trigger, our background server securely forwards complete structured JSON data payloads, skipping browser CORS issues.
+                </p>
+              </div>
+
+              {/* Form container */}
+              <form onSubmit={handleSaveSettings} className="space-y-6">
+                
+                {/* 1. Lead Created Webhook */}
+                <div className="border border-slate-100 rounded-xl p-5 space-y-4 bg-slate-50/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block">Event Trigger 1</span>
+                      <h4 className="text-sm font-semibold text-slate-800">Lead Created Event</h4>
+                    </div>
+                    <span className="text-[10px] bg-slate-200/65 text-slate-600 font-semibold px-2 py-1 rounded-md font-mono self-start sm:self-auto">
+                      POST • payload.lead
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-600">Webhook URL</label>
+                      <input 
+                        type="url" 
+                        value={settings.n8nLeadCreatedUrl || ''}
+                        onChange={(e) => setSettings({ ...settings, n8nLeadCreatedUrl: e.target.value })}
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans bg-white shadow-xs"
+                        placeholder="https://n8n.yourdomain.com/webhook/lead-created"
+                      />
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 bg-white/70 border border-slate-100 p-3.5 rounded-xl">
+                      <div className="text-xs text-slate-500">
+                        Test dispatch with a sample student registration lead structure
+                      </div>
+                      <button
+                        type="button"
+                        disabled={testResults.created.status === 'loading'}
+                        onClick={() => handleTestWebhook('created', settings.n8nLeadCreatedUrl)}
+                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-700 px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      >
+                        {testResults.created.status === 'loading' ? 'Dispatching...' : 'Send Test Payload'}
+                      </button>
+                    </div>
+
+                    {testResults.created.status !== 'idle' && (
+                      <div className={`p-3 rounded-xl border text-xs leading-relaxed flex items-center gap-2 animate-in slide-in-from-top-1 duration-200 ${
+                        testResults.created.status === 'success' 
+                        ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' 
+                        : testResults.created.status === 'error'
+                        ? 'bg-rose-50/60 border-rose-100 text-rose-800'
+                        : 'bg-indigo-50/45 border-indigo-100 text-indigo-800 animate-pulse'
+                      }`}>
+                        <div className="font-medium flex-1">
+                          {testResults.created.message}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Lead Status Changed Webhook */}
+                <div className="border border-slate-100 rounded-xl p-5 space-y-4 bg-slate-50/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block">Event Trigger 2</span>
+                      <h4 className="text-sm font-semibold text-slate-800">Lead Status Changed Event</h4>
+                    </div>
+                    <span className="text-[10px] bg-slate-200/65 text-slate-600 font-semibold px-2 py-1 rounded-md font-mono self-start sm:self-auto">
+                      POST • payload.lead
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-600">Webhook URL</label>
+                      <input 
+                        type="url" 
+                        value={settings.n8nStatusChangedUrl || ''}
+                        onChange={(e) => setSettings({ ...settings, n8nStatusChangedUrl: e.target.value })}
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans bg-white shadow-xs"
+                        placeholder="https://n8n.yourdomain.com/webhook/status-changed"
+                      />
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 bg-white/70 border border-slate-100 p-3.5 rounded-xl">
+                      <div className="text-xs text-slate-500">
+                        Test dispatch with status transition metadata structure
+                      </div>
+                      <button
+                        type="button"
+                        disabled={testResults.status.status === 'loading'}
+                        onClick={() => handleTestWebhook('status', settings.n8nStatusChangedUrl)}
+                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-700 px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      >
+                        {testResults.status.status === 'loading' ? 'Dispatching...' : 'Send Test Payload'}
+                      </button>
+                    </div>
+
+                    {testResults.status.status !== 'idle' && (
+                      <div className={`p-3 rounded-xl border text-xs leading-relaxed flex items-center gap-2 animate-in slide-in-from-top-1 duration-200 ${
+                        testResults.status.status === 'success' 
+                        ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' 
+                        : testResults.status.status === 'error'
+                        ? 'bg-rose-50/60 border-rose-100 text-rose-800'
+                        : 'bg-indigo-50/45 border-indigo-100 text-indigo-800 animate-pulse'
+                      }`}>
+                        <div className="font-medium flex-1">
+                          {testResults.status.message}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Task Reminder Webhook */}
+                <div className="border border-slate-100 rounded-xl p-5 space-y-4 bg-slate-50/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block">Event Trigger 3</span>
+                      <h4 className="text-sm font-semibold text-slate-800">Task Reminder Event</h4>
+                    </div>
+                    <span className="text-[10px] bg-slate-200/65 text-slate-600 font-semibold px-2 py-1 rounded-md font-mono self-start sm:self-auto">
+                      POST • payload.task
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-600">Webhook URL</label>
+                      <input 
+                        type="url" 
+                        value={settings.n8nTaskReminderUrl || ''}
+                        onChange={(e) => setSettings({ ...settings, n8nTaskReminderUrl: e.target.value })}
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono placeholder:font-sans bg-white shadow-xs"
+                        placeholder="https://n8n.yourdomain.com/webhook/task-reminder"
+                      />
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 bg-white/70 border border-slate-100 p-3.5 rounded-xl">
+                      <div className="text-xs text-slate-500">
+                        Test dispatch with scheduled task reminders context
+                      </div>
+                      <button
+                        type="button"
+                        disabled={testResults.reminder.status === 'loading'}
+                        onClick={() => handleTestWebhook('reminder', settings.n8nTaskReminderUrl)}
+                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-700 px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      >
+                        {testResults.reminder.status === 'loading' ? 'Dispatching...' : 'Send Test Payload'}
+                      </button>
+                    </div>
+
+                    {testResults.reminder.status !== 'idle' && (
+                      <div className={`p-3 rounded-xl border text-xs leading-relaxed flex items-center gap-2 animate-in slide-in-from-top-1 duration-200 ${
+                        testResults.reminder.status === 'success' 
+                        ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' 
+                        : testResults.reminder.status === 'error'
+                        ? 'bg-rose-50/60 border-rose-100 text-rose-800'
+                        : 'bg-indigo-50/45 border-indigo-100 text-indigo-800 animate-pulse'
+                      }`}>
+                        <div className="font-medium flex-1">
+                          {testResults.reminder.message}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Integration guidelines toggles */}
+                <div className="border border-indigo-100 rounded-2xl p-5 bg-indigo-50/20 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">
+                    Quick n8n Deployment Guidelines
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-600 leading-relaxed">
+                    <div className="space-y-1 bg-white p-3.5 border border-indigo-50 rounded-xl">
+                      <span className="font-bold text-indigo-950 block">1. Setup Webhook Node</span>
+                      <p className="text-slate-500">
+                        Drag a standard **Webhook** node inside n8n. Configure **HTTP Method** to **POST** and set **Response Mode** to "On Received". Copied webhook URL fields should go directly into corresponding slots above.
+                      </p>
+                    </div>
+                    <div className="space-y-1 bg-white p-3.5 border border-indigo-50 rounded-xl">
+                      <span className="font-bold text-indigo-950 block">2. Mapping Key Parameters</span>
+                      <p className="text-slate-500">
+                        n8n canvas lets you reference parsed payload values instantly. For phone notifications, drag <code>{"{{ $json.data.phone }}"}</code>. For client names, drag <code>{"{{ $json.data.name }}"}</code> or email.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lower Action Save bar */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div>
+                    {saveMessage && (
+                      <span className={`text-sm ${saveMessage.includes('Error') ? 'text-rose-500' : 'text-emerald-600'}`}>
+                        {saveMessage}
+                      </span>
+                    )}
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={saving}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? 'Saving...' : 'Save Webhooks'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
 

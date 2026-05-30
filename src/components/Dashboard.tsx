@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { format, subDays, isSameDay } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList, Clock, ArrowRight, Sparkles, Tag } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, Stats, Task, AuditLog, LeadStatus } from '../types';
@@ -318,6 +318,31 @@ export default function Dashboard() {
         count
       };
     });
+  }, [filteredLeads]);
+
+  const tagDistributionData = useMemo(() => {
+    const tagCounts: Record<string, number> = {};
+    filteredLeads.forEach(lead => {
+      if (lead.tags && Array.isArray(lead.tags)) {
+        lead.tags.forEach(tag => {
+          if (tag && tag.trim()) {
+            const normalized = tag.trim();
+            tagCounts[normalized] = (tagCounts[normalized] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    const entries = Object.entries(tagCounts).map(([name, count]) => ({
+      tag: name,
+      count
+    }));
+
+    // Sort descending by count, then alphabetically
+    entries.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+
+    // Limit to top 10 tags to prevent design clutter
+    return entries.slice(0, 10);
   }, [filteredLeads]);
 
   const tasksDueToday = useMemo(() => {
@@ -726,75 +751,168 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Lead Distribution by stage bar chart */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 font-display">Lead Distribution by Pipeline Stage</h3>
-          <p className="text-xs text-slate-500 mt-1">
-            Visual representations of absolute lead counts grouped across default and active application statuses.
-          </p>
-        </div>
-        <div className="h-80 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={stageDistributionData}
-              margin={{ top: 10, right: 20, left: -20, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis 
-                dataKey="stage" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 10, fill: '#64748b' }}
-                interval={0}
-                angle={-15}
-                textAnchor="end"
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 11, fill: '#64748b' }} 
-                allowDecimals={false}
-              />
-              <Tooltip
-                cursor={{ fill: 'rgba(99, 102, 241, 0.04)' }}
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
+      {/* Visual Analytics Row: Pipeline and Tags distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Lead Distribution by stage bar chart */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 font-display">Lead Distribution by Pipeline Stage</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Visual representations of absolute lead counts grouped across default and active application statuses.
+            </p>
+          </div>
+          <div className="h-80 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={stageDistributionData}
+                margin={{ top: 10, right: 20, left: -20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="stage" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  interval={0}
+                  angle={-15}
+                  textAnchor="end"
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748b' }} 
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(99, 102, 241, 0.04)' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-md border border-slate-800 space-y-1">
+                          <p className="font-bold">{data.stage}</p>
+                          <p className="text-slate-300">Total Leads: <span className="font-semibold text-indigo-300">{data.count}</span></p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={45}>
+                  {stageDistributionData.map((entry, index) => {
+                    const colors = [
+                      '#6366f1', // Indigo
+                      '#4f46e5', // Deep Indigo
+                      '#3b82f6', // Blue
+                      '#2563eb', // Deep Blue
+                      '#06b6d4', // Cyan
+                      '#0d9488', // Teal
+                      '#10b981', // Emerald
+                      '#8b5cf6', // Purple
+                      '#94a3b8'  // Slate
+                    ];
                     return (
-                      <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-md border border-slate-800 space-y-1">
-                        <p className="font-bold">{data.stage}</p>
-                        <p className="text-slate-300">Total Leads: <span className="font-semibold text-indigo-300">{data.count}</span></p>
-                      </div>
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={colors[index % colors.length]} 
+                        fillOpacity={0.85}
+                      />
                     );
-                  }
-                  return null;
-                }}
-              />
-              <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={45}>
-                {stageDistributionData.map((entry, index) => {
-                  const colors = [
-                    '#6366f1', // Indigo
-                    '#4f46e5', // Deep Indigo
-                    '#3b82f6', // Blue
-                    '#2563eb', // Deep Blue
-                    '#06b6d4', // Cyan
-                    '#0d9488', // Teal
-                    '#10b981', // Emerald
-                    '#8b5cf6', // Purple
-                    '#94a3b8'  // Slate
-                  ];
-                  return (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={colors[index % colors.length]} 
-                      fillOpacity={0.85}
-                    />
-                  );
-                })}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Lead Tags Distribution bar chart */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 bg-amber-50 text-amber-600 rounded">
+                <Tag className="w-3.5 h-3.5" />
+              </span>
+              <h3 className="text-sm font-semibold text-slate-900 font-display">Popular Lead Tags Distribution</h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Top 10 active audience segments, interest cohorts, or sourcing labels.
+            </p>
+          </div>
+          <div className="h-80 w-full pt-2">
+            {tagDistributionData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={tagDistributionData}
+                  margin={{ top: 10, right: 20, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="tag" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    interval={0}
+                    angle={-15}
+                    textAnchor="end"
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(99, 102, 241, 0.04)' }}
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-md border border-slate-800 space-y-1">
+                            <p className="font-bold flex items-center gap-1 text-amber-400">
+                              <Tag className="w-3 h-3 text-amber-400" />
+                              {data.tag}
+                            </p>
+                            <p className="text-slate-300">Total Leads: <span className="font-semibold text-amber-300">{data.count}</span></p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={45}>
+                    {tagDistributionData.map((entry, index) => {
+                      const colors = [
+                        '#f59e0b', // Amber-500
+                        '#d97706', // Amber-600
+                        '#b45309', // Amber-700
+                        '#eab308', // Yellow-500
+                        '#ca8a04', // Yellow-600
+                        '#a16207', // Yellow-700
+                        '#f97316', // Orange-500
+                        '#ea580c', // Orange-600
+                        '#c2410c'  // Orange-700
+                      ];
+                      return (
+                        <Cell 
+                          key={`cell-tag-${index}`} 
+                          fill={colors[index % colors.length]} 
+                          fillOpacity={0.85}
+                        />
+                      );
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-100 rounded-xl bg-slate-50/40">
+                <Tag className="w-8 h-8 text-slate-300 mb-2 stroke-[1.5]" />
+                <p className="text-xs font-semibold text-slate-600">No Lead Tags Found</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                  Create or assign tags to candidates in the CRM Pipeline/Leads table to visualize the popular cohort distributions here.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
