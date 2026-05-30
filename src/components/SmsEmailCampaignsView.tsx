@@ -53,6 +53,7 @@ export default function SmsEmailCampaignsView() {
       if (audience === 'Follow-up Required') return lead.status === 'Follow-up';
       if (audience === 'Consultation Booked') return lead.status === 'Consultation Booked';
       if (audience === 'Payment Pending') return lead.status === 'Payment Pending';
+      if (audience === 'Discarded Leads') return lead.status === 'Discarded';
       return false;
     });
   };
@@ -162,6 +163,7 @@ export default function SmsEmailCampaignsView() {
                 <option value="Consultation Booked">Consultation Booked</option>
                 <option value="Payment Pending">Payment Pending</option>
                 <option value="Enrolled Students">Enrolled Students</option>
+                <option value="Discarded Leads">Discarded Leads</option>
               </select>
               
               {/* Audience Preview */}

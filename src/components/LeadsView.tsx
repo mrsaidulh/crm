@@ -981,6 +981,10 @@ export default function LeadsView() {
                 <option value="New">New</option>
                 <option value="Contacted">Contacted</option>
                 <option value="Follow-up">Follow-up</option>
+                <option value="Consultation Booked">Consultation Booked</option>
+                <option value="Counseling Done">Counseling Done</option>
+                <option value="Demo Class">Demo Class</option>
+                <option value="Payment Pending">Payment Pending</option>
                 <option value="Enrolled">Enrolled</option>
                 <option value="Discarded">Discarded</option>
               </select>
@@ -1303,6 +1307,10 @@ export default function LeadsView() {
                           <option value="New">New</option>
                           <option value="Contacted">Contacted</option>
                           <option value="Follow-up">Follow-up</option>
+                          <option value="Consultation Booked">Consultation Booked</option>
+                          <option value="Counseling Done">Counseling Done</option>
+                          <option value="Demo Class">Demo Class</option>
+                          <option value="Payment Pending">Payment Pending</option>
                           <option value="Enrolled">Enrolled</option>
                           <option value="Discarded">Discarded</option>
                         </select>

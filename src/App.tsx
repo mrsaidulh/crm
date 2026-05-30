@@ -128,38 +128,10 @@ export default function App() {
             <div className="bg-indigo-100 p-3 rounded-xl inline-flex mb-3">
               <GraduationCap className="w-8 h-8 text-indigo-600" />
             </div>
-            <h1 className="text-xl font-display font-bold text-slate-900">IELTS Revolution CRM</h1>
+            <h1 className="text-xl font-display font-bold text-slate-900">IELTS Revolution</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Administrator Access Portal
+              CRM Administrator Access
             </p>
-          </div>
-
-          <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 text-xs space-y-1.5 text-indigo-800">
-            <p className="font-semibold text-indigo-950 border-b border-indigo-100/60 pb-1 mb-1.5 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-indigo-600" /> Master Credentials
-            </p>
-            <div className="flex justify-between items-center">
-              <span>Email:</span>
-              <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">toieltsrevolution@gmail.com</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Password:</span>
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono bg-white px-1.5 py-0.5 rounded text-indigo-950 font-medium select-all">
-                  {showCredPassword ? 'Irevocrm1$%' : '••••••••••••'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowCredPassword(p => !p)}
-                  className="bg-white hover:bg-indigo-50 border border-indigo-150 text-[10px] text-indigo-700 font-semibold px-1 py-0.5 rounded transition-all shrink-0"
-                >
-                  {showCredPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-            <div className="text-[10px] text-indigo-555 font-medium mt-1 text-right">
-              Master Admin: Saidul Hasan
-            </div>
           </div>
 
           {errorMsg && (

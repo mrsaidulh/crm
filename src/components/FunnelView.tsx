@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { logAuditEvent } from '../utils/auditLogger';
 import type { Lead, LeadStatus } from '../types';
 
-const STATUSES: LeadStatus[] = ['New', 'Contacted', 'Consultation Booked', 'Demo Class', 'Payment Pending', 'Enrolled'];
+const STATUSES: LeadStatus[] = ['New', 'Contacted', 'Consultation Booked', 'Demo Class', 'Payment Pending', 'Enrolled', 'Discarded'];
 
 const STATUS_COLORS: Record<LeadStatus, { bg: string; text: string; border: string; accent: string; dot: string; glow: string }> = {
   'New': { bg: 'bg-indigo-50/80', text: 'text-indigo-700', border: 'border-indigo-100', accent: 'bg-indigo-600', dot: 'bg-indigo-500', glow: 'shadow-indigo-100/50' },
