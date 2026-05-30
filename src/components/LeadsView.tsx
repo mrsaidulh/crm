@@ -1238,8 +1238,11 @@ export default function LeadsView() {
                         />
                       </td>
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-900 flex items-center gap-2">
-                          {lead.name}
+                        <div className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
+                          <span>{lead.name}</span>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`} title={`Lead Score: ${scoreDetails.score} (${scoreDetails.level})`}>
+                            ★ {scoreDetails.score}
+                          </span>
                         </div>
                         
                         {/* Tags Pill Container */}

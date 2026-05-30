@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { Phone, Mail, GripVertical, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { logAuditEvent } from '../utils/auditLogger';
 import type { Lead, LeadStatus } from '../types';
 
 const STATUSES: LeadStatus[] = ['New', 'Contacted', 'Consultation Booked', 'Demo Class', 'Payment Pending', 'Enrolled'];
@@ -43,6 +44,9 @@ export default function FunnelView() {
   const updateLeadStatus = async (id: string, newStatus: LeadStatus) => {
     // Optimistically update the UI status immediately
     const prevLeads = [...leads];
+    const leadObj = leads.find(l => l.id === id);
+    if (!leadObj) return;
+
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
 
     try {
@@ -54,6 +58,14 @@ export default function FunnelView() {
       if (!response.ok) {
         throw new Error('Failed to update stage on the database backend');
       }
+
+      // Successfully updated on database - log audit trail
+      logAuditEvent({
+        action: 'Lead Status Transition',
+        entityType: 'lead',
+        entityId: id,
+        details: `Lead "${leadObj.name}" status transitioned from "${leadObj.status}" to "${newStatus}".`
+      });
     } catch (e) {
       console.error('Error updating status:', e);
       // Revert in case of standard errors
