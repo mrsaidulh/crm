@@ -9,6 +9,327 @@ import { triggerWebhookProxy } from '../utils/automation';
 
 type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'n8n' | 'database';
 
+function LiveMetaTestBlock({ settings }: { settings: UserSettings }) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testEvent, setTestEvent] = useState('Lead');
+
+  const handleTriggerTestSignal = async () => {
+    if (!settings.metaPixelId || !settings.metaAccessToken) {
+      alert('Please fill in both Pixel ID and Access Token to test.');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/meta/test-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pixelId: settings.metaPixelId.trim(),
+          accessToken: settings.metaAccessToken.trim(),
+          testEventCode: settings.metaTestEventCode?.trim() || undefined,
+          eventName: testEvent
+        })
+      });
+
+      const res = await response.json();
+      if (response.ok && res.success) {
+        setTestResult({
+          success: true,
+          message: `Success! Meta API responded with 200 OK. Verification event sent to Pixel.`
+        });
+      } else {
+        const errDetails = res.error?.error?.message || JSON.stringify(res.error) || 'Invalid credentials or API block.';
+        setTestResult({
+          success: false,
+          message: `Error response: ${errDetails}`
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: `Execution failed: ${err.message || 'CORS or routing issues'}`
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 mt-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+            <Activity className="w-3.5 h-3.5 text-rose-505 bg-rose-100 flex items-center justify-center p-0.5 rounded-full" />
+            Live Event Signal Debugger & Sandbox
+          </span>
+          <p className="text-[11px] text-slate-500 leading-normal font-normal">
+            Transmit a mock Conversion event to your Meta Pixel Events Manager dashboard in real-time to audit payloads.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <select
+          value={testEvent}
+          onChange={(e) => setTestEvent(e.target.value)}
+          className="text-xs border border-slate-200 rounded-xl py-1.5 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white font-medium"
+        >
+          <option value="Lead">Standard: Lead</option>
+          <option value="Contact">Standard: Contact</option>
+          <option value="Schedule">Standard: Schedule</option>
+          <option value="SubmitApplication">Standard: SubmitApplication</option>
+          <option value="InitiateCheckout">Standard: InitiateCheckout</option>
+          <option value="Purchase">Standard: Purchase</option>
+        </select>
+
+        <button
+          type="button"
+          disabled={testing}
+          onClick={handleTriggerTestSignal}
+          className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2 rounded-xl hover:shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+        >
+          {testing ? (
+            <>
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Firing Server Wire...
+            </>
+          ) : (
+            <>
+              <span>Fire Test Event Signal</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`p-3 rounded-xl border text-xs font-medium leading-relaxed font-sans ${
+          testResult.success 
+            ? 'bg-emerald-50 text-emerald-850 border-emerald-250' 
+            : 'bg-rose-50 text-rose-850 border-rose-250'
+        }`}>
+          <div className="flex items-start gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${testResult.success ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+            <span className="break-all font-normal">{testResult.message}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveClaudeTestBlock({ settings }: { settings: UserSettings }) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    if (!settings.claudeApiKey) {
+      alert('Please fill in your Anthropic API Key first.');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/claude/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: settings.claudeApiKey.trim(),
+          model: settings.claudeDefaultModel || 'claude-3-5-sonnet-20241022'
+        })
+      });
+
+      const res = await response.json();
+      if (response.ok && res.success) {
+        setTestResult({
+          success: true,
+          message: `Success! Handshake achieved. Claude responded: "${res.message}" [${res.modelUsed}]`
+        });
+      } else {
+        const errDetails = res.error || 'Server error or invalid key block.';
+        setTestResult({
+          success: false,
+          message: `Connection Failed: ${errDetails}`
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: `Execution failed: ${err.message || 'CORS or routing issues'}`
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="bg-amber-50/40 border border-amber-200/50 rounded-2xl p-4 mt-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-slate-705 uppercase tracking-wide flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            Anthropic Handshake Gateway Tester
+          </span>
+          <p className="text-[11px] text-slate-500 leading-normal">
+            Establish a real-time secure WebSocket connection to verify access permissions, usage credits, and token quotas.
+          </p>
+        </div>
+      </div>
+
+      <div className="pt-1">
+        <button
+          type="button"
+          disabled={testing}
+          onClick={handleTestConnection}
+          className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-65 cursor-pointer shadow-xs border border-transparent"
+        >
+          {testing ? (
+            <>
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Verifying credentials with Anthropic...
+            </>
+          ) : (
+            <>
+              <span>Verify Claude Credentials</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`p-3 rounded-xl border text-xs font-medium leading-relaxed font-sans ${
+          testResult.success 
+            ? 'bg-emerald-50 text-emerald-850 border-emerald-250' 
+            : 'bg-rose-50 text-rose-850 border-rose-250'
+        }`}>
+          <div className="flex items-start gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${testResult.success ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+            <span className="break-all font-normal">{testResult.message}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveGoogleTestBlock({ settings }: { settings: UserSettings }) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testEvent, setTestEvent] = useState('generate_lead');
+
+  const handleTriggerTestSignal = async () => {
+    if (!settings.googleMeasurementId && !settings.googleConversionId) {
+      alert('Please fill in either a Google Analytics Measurement ID or a Google Ads Conversion ID first.');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/google/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          measurementId: settings.googleMeasurementId?.trim() || undefined,
+          apiSecret: settings.googleApiSecret?.trim() || undefined,
+          conversionId: settings.googleConversionId?.trim() || undefined,
+          conversionLabel: settings.googleConversionLabel?.trim() || undefined,
+          eventName: testEvent
+        })
+      });
+
+      const res = await response.json();
+      if (response.ok && res.success) {
+        setTestResult({
+          success: true,
+          message: res.message || 'Success! Google webhook connection verified successfully.'
+        });
+      } else {
+        const errDetails = res.error || 'Invalid credentials or connection timeout.';
+        setTestResult({
+          success: false,
+          message: `Connection Failed: ${errDetails}`
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: `Execution failed: ${err.message || 'CORS or network route issue.'}`
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="bg-indigo-50/40 border border-indigo-200/50 rounded-2xl p-4 mt-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-slate-750 uppercase tracking-wide flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+            Google Offline Conversion Signal Debugger
+          </span>
+          <p className="text-[11px] text-slate-500 leading-normal">
+            Verify key security configurations and dispatch a live test ping directly to GA4 or Google Ads endpoints.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <select
+          value={testEvent}
+          onChange={(e) => setTestEvent(e.target.value)}
+          className="text-xs border border-slate-200 rounded-xl py-1.5 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white font-medium cursor-pointer"
+        >
+          <option value="generate_lead">Standard GA4: generate_lead</option>
+          <option value="contact">Standard GA4: contact</option>
+          <option value="schedule">Standard GA4: schedule</option>
+          <option value="submit_application">Standard GA4: submit_application</option>
+          <option value="begin_checkout">Standard GA4: begin_checkout</option>
+          <option value="purchase">Standard GA4: purchase</option>
+        </select>
+
+        <button
+          type="button"
+          disabled={testing}
+          onClick={handleTriggerTestSignal}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-65 cursor-pointer"
+        >
+          {testing ? (
+            <>
+              <RefreshCw className="w-3 h-3 animate-spin animate-infinite" />
+              Firing handshake signal...
+            </>
+          ) : (
+            <>
+              <span>Verify Google Connection</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`p-3 rounded-xl border text-xs font-medium leading-relaxed font-sans ${
+          testResult.success 
+            ? 'bg-emerald-50 text-emerald-850 border-emerald-250' 
+            : 'bg-rose-50 text-rose-850 border-rose-250'
+        }`}>
+          <div className="flex items-start gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${testResult.success ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+            <span className="break-all font-normal">{testResult.message}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsView() {
   const { user, updateProfile, isSuperAdmin, toggleTwoFactor } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
@@ -1282,6 +1603,338 @@ export default function SettingsView() {
                        </select>
                     </div>
                   </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
+                        fb
+                      </div>
+                      Meta Conversions API (CAPI) Integration
+                    </h3>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={!!settings.metaEnabled} 
+                        onChange={(e) => setSettings({ ...settings, metaEnabled: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-650"></div>
+                      <span className="ml-2 text-xs font-semibold text-slate-705">
+                        {settings.metaEnabled ? 'ENABLED' : 'DISABLED'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {settings.metaEnabled && (
+                    <div className="space-y-4 animate-in slide-in-from-top-4 duration-300">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Meta Pixel ID
+                            <span className="text-red-500">*</span>
+                          </label>
+                          <input 
+                            type="text" 
+                            required={settings.metaEnabled}
+                            value={settings.metaPixelId || ''}
+                            onChange={(e) => setSettings({ ...settings, metaPixelId: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="e.g. 123456789012345"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            System Access Token
+                            <span className="text-red-500">*</span>
+                          </label>
+                          <input 
+                            type="password" 
+                            required={settings.metaEnabled}
+                            value={settings.metaAccessToken || ''}
+                            onChange={(e) => setSettings({ ...settings, metaAccessToken: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="EAAGz..."
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Test Event Code (Optional)
+                            <span className="text-slate-400 font-normal">(Used inside Events Manager to verify server signals in Test Events tab)</span>
+                          </label>
+                          <input 
+                            type="text" 
+                            value={settings.metaTestEventCode || ''}
+                            onChange={(e) => setSettings({ ...settings, metaTestEventCode: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono uppercase tracking-wider bg-white text-slate-800"
+                            placeholder="e.g. TEST12345"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Mapping Setup collapsible or visual config */}
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 mt-2 space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-ping" />
+                            CRM Pipeline Status to FB Standard Event Mapping
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          Map IELTS CRM lead stages to Facebook standard pixel events to optimize automatic targeting:
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                          {[
+                            { status: 'New', defaultEv: 'Lead' },
+                            { status: 'Contacted', defaultEv: 'Contact' },
+                            { status: 'Follow-up', defaultEv: 'Contact' },
+                            { status: 'Consultation Booked', defaultEv: 'Schedule' },
+                            { status: 'Counseling Done', defaultEv: 'SubmitApplication' },
+                            { status: 'Demo Class', defaultEv: 'SubmitApplication' },
+                            { status: 'Payment Pending', defaultEv: 'InitiateCheckout' },
+                            { status: 'Enrolled', defaultEv: 'Purchase' },
+                          ].map(({ status, defaultEv }) => {
+                            const mapping = settings.metaMapping || {};
+                            const currentVal = mapping[status] || defaultEv;
+                            return (
+                              <div key={status} className="flex items-center justify-between gap-3 bg-white p-2 border border-slate-100 rounded-xl">
+                                <span className="text-xs font-medium text-slate-700">{status}</span>
+                                <select
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const nextMapping = { ...mapping, [status]: e.target.value };
+                                    setSettings({ ...settings, metaMapping: nextMapping });
+                                  }}
+                                  className="text-xs border border-slate-200 rounded-lg py-1 px-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 font-medium cursor-pointer"
+                                >
+                                  <option value="Lead">Lead</option>
+                                  <option value="Contact">Contact</option>
+                                  <option value="Schedule">Schedule</option>
+                                  <option value="SubmitApplication">SubmitApplication</option>
+                                  <option value="InitiateCheckout">InitiateCheckout</option>
+                                  <option value="Purchase">Purchase</option>
+                                  <option value="Search">Search</option>
+                                  <option value="ignore">Don't Send (Ignore)</option>
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Signal Verification and Live Testing block */}
+                      <LiveMetaTestBlock settings={settings} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs uppercase">
+                        g
+                      </div>
+                      Google Ads & Analytics (GA4) Offline Integration
+                    </h3>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={!!settings.googleEnabled} 
+                        onChange={(e) => setSettings({ ...settings, googleEnabled: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      <span className="ml-2 text-xs font-semibold text-slate-705">
+                        {settings.googleEnabled ? 'ENABLED' : 'DISABLED'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {settings.googleEnabled && (
+                    <div className="space-y-4 animate-in slide-in-from-top-4 duration-300">
+                      <p className="text-[11px] text-slate-500 leading-normal">
+                        Bridge the loop between counselor actions & Google Ads smart bidding systems using GA4 Measurement Protocol server signals.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            GA4 Measurement ID (Optional)
+                          </label>
+                          <input 
+                            type="text" 
+                            value={settings.googleMeasurementId || ''}
+                            onChange={(e) => setSettings({ ...settings, googleMeasurementId: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="e.g. G-H2XXXXXX"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            GA4 Measurement Protocol API Secret (Optional)
+                          </label>
+                          <input 
+                            type="password" 
+                            value={settings.googleApiSecret || ''}
+                            onChange={(e) => setSettings({ ...settings, googleApiSecret: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="e.g. _xxxxxx_xxxxxxxxxxxx"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Google Ads Conversion ID (Optional)
+                          </label>
+                          <input 
+                            type="text" 
+                            value={settings.googleConversionId || ''}
+                            onChange={(e) => setSettings({ ...settings, googleConversionId: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="e.g. AW-123456789 (or Link to GA4)"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Google Ads Conversion Label (Optional)
+                          </label>
+                          <input 
+                            type="text" 
+                            value={settings.googleConversionLabel || ''}
+                            onChange={(e) => setSettings({ ...settings, googleConversionLabel: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
+                            placeholder="e.g. abCDefGhIj_123456"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Google Mappings Panel */}
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 mt-2 space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-ping" />
+                            CRM Pipeline Status to Google conversion mapping
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          Configuring accurate mapped actions maximizes YouTube Smart Campaign scaling models.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                          {[
+                            { status: 'New', defaultEv: 'generate_lead' },
+                            { status: 'Contacted', defaultEv: 'contact' },
+                            { status: 'Follow-up', defaultEv: 'contact' },
+                            { status: 'Consultation Booked', defaultEv: 'schedule' },
+                            { status: 'Counseling Done', defaultEv: 'submit_application' },
+                            { status: 'Demo Class', defaultEv: 'submit_application' },
+                            { status: 'Payment Pending', defaultEv: 'begin_checkout' },
+                            { status: 'Enrolled', defaultEv: 'purchase' },
+                          ].map(({ status, defaultEv }) => {
+                            const mapping = settings.googleMapping || {};
+                            const currentVal = mapping[status] || defaultEv;
+                            return (
+                              <div key={status} className="flex items-center justify-between gap-3 bg-white p-2 border border-slate-100 rounded-xl">
+                                <span className="text-xs font-medium text-slate-700">{status}</span>
+                                <select
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const nextMapping = { ...mapping, [status]: e.target.value };
+                                    setSettings({ ...settings, googleMapping: nextMapping });
+                                  }}
+                                  className="text-xs border border-slate-200 rounded-lg py-1 px-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 font-medium cursor-pointer"
+                                >
+                                  <option value="generate_lead">generate_lead</option>
+                                  <option value="contact">contact</option>
+                                  <option value="schedule">schedule</option>
+                                  <option value="submit_application">submit_application</option>
+                                  <option value="begin_checkout">begin_checkout</option>
+                                  <option value="purchase">purchase</option>
+                                  <option value="ignore">Don't Send (Ignore)</option>
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Signal Verification and Live Testing block */}
+                      <LiveGoogleTestBlock settings={settings} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-[10px] uppercase tracking-wide">
+                        cl
+                      </div>
+                      Anthropic Claude AI Integration Portal
+                    </h3>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={!!settings.claudeEnabled} 
+                        onChange={(e) => setSettings({ ...settings, claudeEnabled: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                      <span className="ml-2 text-xs font-semibold text-slate-705">
+                        {settings.claudeEnabled ? 'ENABLED' : 'DISABLED'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {settings.claudeEnabled && (
+                    <div className="space-y-4 animate-in slide-in-from-top-4 duration-300">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Anthropic API Key
+                            <span className="text-amber-500">*</span>
+                          </label>
+                          <input 
+                            type="password" 
+                            required={settings.claudeEnabled}
+                            value={settings.claudeApiKey || ''}
+                            onChange={(e) => setSettings({ ...settings, claudeApiKey: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm bg-white text-slate-800 font-mono"
+                            placeholder="sk-ant-..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                            Default AI Engine Model
+                            <span className="text-amber-500">*</span>
+                          </label>
+                          <select 
+                            value={settings.claudeDefaultModel || 'claude-3-5-sonnet-20241022'}
+                            onChange={(e) => setSettings({ ...settings, claudeDefaultModel: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm bg-white text-slate-800 font-medium cursor-pointer"
+                          >
+                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Recommended)</option>
+                            <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Ultra Fast)</option>
+                            <option value="claude-3-opus-20240229">Claude 3 Opus (Maximum Intelligence)</option>
+                          </select>
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                            Expert Guidance & System Instructions
+                          </label>
+                          <textarea 
+                            value={settings.claudeSystemPrompt || ''}
+                            onChange={(e) => setSettings({ ...settings, claudeSystemPrompt: e.target.value })}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm bg-white text-slate-800 h-24"
+                            placeholder="e.g. Customize how Claude writes recommendations, formats study summaries, scores enrollment signals, and suggestions..."
+                          />
+                        </div>
+                      </div>
+
+                      <LiveClaudeTestBlock settings={settings} />
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-6 border-t border-slate-100">

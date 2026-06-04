@@ -99,7 +99,22 @@ function mapDbRowToSettings(r: any): UserSettings {
     smtpEncryption: r.smtp_encryption as any || undefined,
     n8nLeadCreatedUrl: r.n8n_lead_created_url || undefined,
     n8nStatusChangedUrl: r.n8n_status_changed_url || undefined,
-    n8nTaskReminderUrl: r.n8n_task_reminder_url || undefined
+    n8nTaskReminderUrl: r.n8n_task_reminder_url || undefined,
+    metaEnabled: r.meta_enabled === 1,
+    metaPixelId: r.meta_pixel_id || undefined,
+    metaAccessToken: r.meta_access_token || undefined,
+    metaTestEventCode: r.meta_test_event_code || undefined,
+    metaMapping: r.meta_mapping ? (typeof r.meta_mapping === 'string' ? JSON.parse(r.meta_mapping) : r.meta_mapping) : undefined,
+    claudeEnabled: r.claude_enabled === 1,
+    claudeApiKey: r.claude_api_key || undefined,
+    claudeDefaultModel: r.claude_default_model || undefined,
+    claudeSystemPrompt: r.claude_system_prompt || undefined,
+    googleEnabled: r.google_enabled === 1,
+    googleConversionId: r.google_conversion_id || undefined,
+    googleConversionLabel: r.google_conversion_label || undefined,
+    googleMeasurementId: r.google_measurement_id || undefined,
+    googleApiSecret: r.google_api_secret || undefined,
+    googleMapping: r.google_mapping ? (typeof r.google_mapping === 'string' ? JSON.parse(r.google_mapping) : r.google_mapping) : undefined
   };
 }
 
@@ -191,6 +206,53 @@ try {
           // Column already exists
         }
 
+        // Ensure Meta Conversions API columns are present on settings table
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `meta_enabled` TINYINT DEFAULT 0");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `meta_pixel_id` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `meta_access_token` TEXT DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `meta_test_event_code` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `meta_mapping` JSON DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `claude_enabled` TINYINT DEFAULT 0");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `claude_api_key` TEXT DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `claude_default_model` VARCHAR(128) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `claude_system_prompt` TEXT DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_enabled` TINYINT DEFAULT 0");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_conversion_id` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_conversion_label` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_measurement_id` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_api_secret` VARCHAR(255) DEFAULT NULL");
+        } catch (alterColErr) {}
+        try {
+          await conn.query("ALTER TABLE `settings` ADD COLUMN `google_mapping` JSON DEFAULT NULL");
+        } catch (alterColErr) {}
+
         // Wipe all previous lead and activity logs data as requested by the user
         await conn.query('DELETE FROM `leads`');
         await conn.query('DELETE FROM `tasks`');
@@ -258,6 +320,22 @@ export const dbService = {
       list = inMemoryLeads;
     }
     return list.filter(l => l && l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' && l.name?.trim() !== 'Saidul');
+  },
+
+  async getLeadById(id: string): Promise<Lead | null> {
+    if (pool) {
+      try {
+        const [rows] = await pool.execute('SELECT * FROM leads WHERE id = ?', [id]);
+        const results = rows as any[];
+        if (results.length > 0) {
+          return mapDbRowToLead(results[0]);
+        }
+        return null;
+      } catch (err) {
+        console.error('[MySQL] getLeadById failed:', err);
+      }
+    }
+    return inMemoryLeads.find(l => l.id === id) || null;
   },
 
   async insertLead(lead: Lead): Promise<void> {
@@ -564,8 +642,11 @@ export const dbService = {
           INSERT INTO settings (
             user_id, sms_provider, sms_api_url, sms_api_key, sms_sender_id, sms_client_id,
             smtp_host, smtp_port, smtp_username, smtp_password, smtp_from_email, smtp_from_name, smtp_encryption,
-            n8n_lead_created_url, n8n_status_changed_url, n8n_task_reminder_url
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            n8n_lead_created_url, n8n_status_changed_url, n8n_task_reminder_url,
+            meta_enabled, meta_pixel_id, meta_access_token, meta_test_event_code, meta_mapping,
+            claude_enabled, claude_api_key, claude_default_model, claude_system_prompt,
+            google_enabled, google_conversion_id, google_conversion_label, google_measurement_id, google_api_secret, google_mapping
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             sms_provider = VALUES(sms_provider),
             sms_api_url = VALUES(sms_api_url),
@@ -581,7 +662,22 @@ export const dbService = {
             smtp_encryption = VALUES(smtp_encryption),
             n8n_lead_created_url = VALUES(n8n_lead_created_url),
             n8n_status_changed_url = VALUES(n8n_status_changed_url),
-            n8n_task_reminder_url = VALUES(n8n_task_reminder_url)
+            n8n_task_reminder_url = VALUES(n8n_task_reminder_url),
+            meta_enabled = VALUES(meta_enabled),
+            meta_pixel_id = VALUES(meta_pixel_id),
+            meta_access_token = VALUES(meta_access_token),
+            meta_test_event_code = VALUES(meta_test_event_code),
+            meta_mapping = VALUES(meta_mapping),
+            claude_enabled = VALUES(claude_enabled),
+            claude_api_key = VALUES(claude_api_key),
+            claude_default_model = VALUES(claude_default_model),
+            claude_system_prompt = VALUES(claude_system_prompt),
+            google_enabled = VALUES(google_enabled),
+            google_conversion_id = VALUES(google_conversion_id),
+            google_conversion_label = VALUES(google_conversion_label),
+            google_measurement_id = VALUES(google_measurement_id),
+            google_api_secret = VALUES(google_api_secret),
+            google_mapping = VALUES(google_mapping)
         `;
         await pool.execute(sql, [
           userId,
@@ -599,7 +695,22 @@ export const dbService = {
           settings.smtpEncryption || 'tls',
           settings.n8nLeadCreatedUrl || null,
           settings.n8nStatusChangedUrl || null,
-          settings.n8nTaskReminderUrl || null
+          settings.n8nTaskReminderUrl || null,
+          settings.metaEnabled ? 1 : 0,
+          settings.metaPixelId || null,
+          settings.metaAccessToken || null,
+          settings.metaTestEventCode || null,
+          settings.metaMapping ? JSON.stringify(settings.metaMapping) : null,
+          settings.claudeEnabled ? 1 : 0,
+          settings.claudeApiKey || null,
+          settings.claudeDefaultModel || null,
+          settings.claudeSystemPrompt || null,
+          settings.googleEnabled ? 1 : 0,
+          settings.googleConversionId || null,
+          settings.googleConversionLabel || null,
+          settings.googleMeasurementId || null,
+          settings.googleApiSecret || null,
+          settings.googleMapping ? JSON.stringify(settings.googleMapping) : null
         ]);
         console.log(`[MySQL] Saved settings for user ${userId}`);
         return;

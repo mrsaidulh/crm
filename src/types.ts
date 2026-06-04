@@ -124,6 +124,27 @@ export interface UserSettings {
   
   // Custom Lead Sources
   customSources?: string[];
+
+  // Meta Conversions API Configuration
+  metaEnabled?: boolean;
+  metaPixelId?: string;
+  metaAccessToken?: string;
+  metaTestEventCode?: string;
+  metaMapping?: Record<string, string>;
+
+  // Anthropic Claude Configuration
+  claudeEnabled?: boolean;
+  claudeApiKey?: string;
+  claudeDefaultModel?: string;
+  claudeSystemPrompt?: string;
+
+  // Google Ads & GA4 Configuration
+  googleEnabled?: boolean;
+  googleConversionId?: string;
+  googleConversionLabel?: string;
+  googleMeasurementId?: string;
+  googleApiSecret?: string;
+  googleMapping?: Record<string, string>;
 }
 
 export interface WorkflowRule {
