@@ -494,8 +494,9 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         });
       }
 
-      // Fallback 404 for unhandled subroutes
-      return jsonResponse({ error: `Not Found: Serverless route ${pathname}` }, 404);
+      // Fallback: if not explicitly mocked by the customer's client-side interceptor, delegate to the real Express backend server
+      console.log(`[API Interceptor] Route ${pathname} fallback to backend server.`);
+      return originalFetch.apply(this, [input, init]);
     } catch (err: any) {
       console.error('[API Interceptor] Fatal Routing Crash:', err);
       return jsonResponse({ error: err.message || 'Serverless Routing Error' }, 500);
