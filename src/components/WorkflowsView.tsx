@@ -92,7 +92,7 @@ export default function WorkflowsView() {
         triggerEvent: formData.triggerEvent,
         actionType: formData.actionType,
         isActive: true,
-        ...(formData.triggerEvent === 'Lead Status Changed' ? { triggerCondition: formData.triggerCondition || 'New' } : {}),
+        ...(formData.triggerEvent === 'Lead Status Changed' ? { triggerCondition: formData.triggerCondition || 'New Lead' } : {}),
         ...(formData.triggerEvent === 'Keywords Match' ? { triggerCondition: formData.triggerCondition || '' } : {}),
         ...(formData.actionType === 'Create Task' ? { taskTitle: formData.taskTitle } : {}),
         ...(formData.actionType === 'Add Tags' ? { taskTitle: formData.taskTitle } : {}),
@@ -158,7 +158,7 @@ export default function WorkflowsView() {
     }
   };
 
-  const statusOptions: LeadStatus[] = ['New', 'Contacted', 'Follow-up', 'Consultation Booked', 'Counseling Done', 'Demo Class', 'Payment Pending', 'Enrolled', 'Discarded'];
+  const statusOptions: LeadStatus[] = ['New Lead', 'Contact', 'Follow-up', 'Consultation Booked', 'Counseling Done', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Discarded'];
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading workflows...</div>;
 

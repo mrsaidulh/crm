@@ -178,11 +178,12 @@ export default function Dashboard() {
 
     // Track stay duration per status
     const stateDurations: Record<string, number[]> = {
-      'New': [],
-      'Contacted': [],
+      'New Lead': [],
+      'Contact': [],
       'Consultation Booked': [],
-      'Demo Class': [],
-      'Payment Pending': []
+      'Demo Class Booked': [],
+      'Payment Pending': [],
+      'Re-engagement Offer': []
     };
 
     leads.forEach(lead => {
@@ -193,7 +194,7 @@ export default function Dashboard() {
       const sorted = [...leadLogs].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       // Identify initial status
-      let initialStatus = 'New';
+      let initialStatus = 'New Lead';
       const firstMatch = sorted[0].details.match(/transitioned from "([^"]+)" to "([^"]+)"/);
       if (firstMatch) {
         initialStatus = firstMatch[1];
@@ -219,15 +220,16 @@ export default function Dashboard() {
 
     // Default industry reference values in MS (used as fallback or for comparison)
     const benchmarkMs: Record<string, number> = {
-      'New': 2 * 60 * 60 * 1000,                  // 2 hours
-      'Contacted': 1.5 * 24 * 60 * 60 * 1000,       // 1.5 days
+      'New Lead': 2 * 60 * 60 * 1000,                  // 2 hours
+      'Contact': 1.5 * 24 * 60 * 60 * 1000,       // 1.5 days
       'Consultation Booked': 3.0 * 24 * 60 * 60 * 1000, // 3 days
-      'Demo Class': 2.0 * 24 * 60 * 60 * 1000,       // 2 days
-      'Payment Pending': 4.0 * 24 * 60 * 60 * 1000    // 4 days
+      'Demo Class Booked': 2.0 * 24 * 60 * 60 * 1000,       // 2 days
+      'Payment Pending': 4.0 * 24 * 60 * 60 * 1000,    // 4 days
+      'Re-engagement Offer': 5.0 * 24 * 60 * 60 * 1000   // 5 days
     };
 
     // Calculate final metrics
-    const order = ['New', 'Contacted', 'Consultation Booked', 'Demo Class', 'Payment Pending'];
+    const order = ['New Lead', 'Contact', 'Consultation Booked', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer'];
     
     let hasRealData = false;
     const items = order.map(status => {
@@ -268,7 +270,7 @@ export default function Dashboard() {
     }
 
     const totalLeads = filteredLeads.length;
-    const newLeads = filteredLeads.filter((l: Lead) => l.status === 'New').length;
+    const newLeads = filteredLeads.filter((l: Lead) => (l.status as string) === 'New Lead' || (l.status as string) === 'New').length;
     const enrolled = filteredLeads.filter((l: Lead) => l.status === 'Enrolled').length;
 
     let estimatedPipelineValue = 0;
@@ -300,13 +302,14 @@ export default function Dashboard() {
 
   const stageDistributionData = useMemo(() => {
     const statuses: LeadStatus[] = [
-      'New',
-      'Contacted',
+      'New Lead',
+      'Contact',
       'Follow-up',
       'Consultation Booked',
       'Counseling Done',
-      'Demo Class',
+      'Demo Class Booked',
       'Payment Pending',
+      'Re-engagement Offer',
       'Enrolled',
       'Discarded'
     ];
@@ -1051,10 +1054,10 @@ export default function Dashboard() {
               
               <div className="bg-white/80 border border-slate-100 rounded-lg p-3">
                 <span className="font-semibold text-slate-800 block text-[11px] uppercase tracking-wider mb-1 text-indigo-600">
-                  Critical Advice — Demo Class Stage
+                  Critical Advice — Demo Class Booked Stage
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  Leads staying longer than 3 days in "Demo Class" or "Payment Pending" stages run a 40% higher chance of turning cold. Proactively trigger SMS reminders or call follow-ups.
+                  Leads staying longer than 3 days in "Demo Class Booked" or "Payment Pending" stages run a 40% higher chance of turning cold. Proactively trigger SMS reminders or call follow-ups.
                 </p>
               </div>
 

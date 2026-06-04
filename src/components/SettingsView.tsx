@@ -398,7 +398,7 @@ export default function SettingsView() {
         email: 'janemiller@ieltsrev.com',
         phone: '+8801712345678',
         source: 'Facebook Ads',
-        status: 'New',
+        status: 'New Lead',
         createdAt: Date.now(),
         notes: 'Interested in IELTS Premium Academic. Prefers evening online sessions.'
       };
@@ -410,10 +410,10 @@ export default function SettingsView() {
         email: 'alex.mercer@gmail.com',
         phone: '+8801911112233',
         source: 'Website Form',
-        status: 'Contacted',
-        previousStatus: 'New',
+        status: 'Contact',
+        previousStatus: 'New Lead',
         createdAt: Date.now() - 86400000,
-        notes: 'Candidate changed status to Contacted.'
+        notes: 'Candidate changed status to Contact.'
       };
     } else {
       eventStr = 'Task Reminder';
@@ -1711,13 +1711,14 @@ export default function SettingsView() {
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                           {[
-                            { status: 'New', defaultEv: 'Lead' },
-                            { status: 'Contacted', defaultEv: 'Contact' },
+                            { status: 'New Lead', defaultEv: 'Lead' },
+                            { status: 'Contact', defaultEv: 'Contact' },
                             { status: 'Follow-up', defaultEv: 'Contact' },
                             { status: 'Consultation Booked', defaultEv: 'Schedule' },
                             { status: 'Counseling Done', defaultEv: 'SubmitApplication' },
-                            { status: 'Demo Class', defaultEv: 'SubmitApplication' },
+                            { status: 'Demo Class Booked', defaultEv: 'SubmitApplication' },
                             { status: 'Payment Pending', defaultEv: 'InitiateCheckout' },
+                            { status: 'Re-engagement Offer', defaultEv: 'Contact' },
                             { status: 'Enrolled', defaultEv: 'Purchase' },
                           ].map(({ status, defaultEv }) => {
                             const mapping = settings.metaMapping || {};
@@ -1851,13 +1852,14 @@ export default function SettingsView() {
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                           {[
-                            { status: 'New', defaultEv: 'generate_lead' },
-                            { status: 'Contacted', defaultEv: 'contact' },
+                            { status: 'New Lead', defaultEv: 'generate_lead' },
+                            { status: 'Contact', defaultEv: 'contact' },
                             { status: 'Follow-up', defaultEv: 'contact' },
                             { status: 'Consultation Booked', defaultEv: 'schedule' },
                             { status: 'Counseling Done', defaultEv: 'submit_application' },
-                            { status: 'Demo Class', defaultEv: 'submit_application' },
+                            { status: 'Demo Class Booked', defaultEv: 'submit_application' },
                             { status: 'Payment Pending', defaultEv: 'begin_checkout' },
+                            { status: 'Re-engagement Offer', defaultEv: 'contact' },
                             { status: 'Enrolled', defaultEv: 'purchase' },
                           ].map(({ status, defaultEv }) => {
                             const mapping = settings.googleMapping || {};

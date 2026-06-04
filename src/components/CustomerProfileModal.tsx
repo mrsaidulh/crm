@@ -60,14 +60,14 @@ export default function CustomerProfileModal({ customer, onClose }: Props) {
         if (data && data.settings) {
           setClaudeSettings(data.settings);
           // Set default Meta Pixel and Google Event based on current lead status
-          const currentStatus = customer.status;
-          if (currentStatus === 'New') {
+          const currentStatus = customer.status as string;
+          if (currentStatus === 'New Lead' || currentStatus === 'New') {
             setSelectedMetaEvent('Lead');
             setSelectedGoogleEvent('generate_lead');
           } else if (currentStatus === 'Enrolled') {
             setSelectedMetaEvent('Purchase');
             setSelectedGoogleEvent('purchase');
-          } else if (currentStatus === 'Contacted' || currentStatus === 'Follow-up') {
+          } else if (currentStatus === 'Contact' || currentStatus === 'Contacted' || currentStatus === 'Follow-up') {
             setSelectedMetaEvent('Contact');
             setSelectedGoogleEvent('contact');
           } else {

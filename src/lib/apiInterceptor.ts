@@ -286,7 +286,7 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         const leadsList = await firebaseService.getLeads(userId);
         
         const totalLeads = leadsList.length;
-        const newLeads = leadsList.filter(l => l.status === 'New').length;
+        const newLeads = leadsList.filter(l => (l.status as string) === 'New Lead' || (l.status as string) === 'New').length;
         const enrolled = leadsList.filter(l => l.status === 'Enrolled').length;
         
         const bySource = leadsList.reduce((acc: any, lead) => {

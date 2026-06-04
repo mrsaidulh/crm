@@ -694,7 +694,7 @@ export default function LeadsView() {
         email: formData.email.trim().toLowerCase(),
         phone: finalPhone,
         source: formData.source,
-        status: editingLeadId ? undefined : 'New', // Add status field 
+        status: editingLeadId ? undefined : 'New Lead', // Add status field 
         notes: formData.notes,
         targetCourse: formData.targetCourse,
         targetBand: formData.targetBand,
@@ -761,7 +761,7 @@ export default function LeadsView() {
            
            // Dispatch automation trigger on lead creation
            triggerGlobalWebhook(userId, 'Lead Created', finalizedLead);
-           triggerWorkflowAutomations(userId, 'Lead Created', 'New', finalizedLead);
+           triggerWorkflowAutomations(userId, 'Lead Created', 'New Lead', finalizedLead);
   
            // Publish log event
            logAuditEvent({
@@ -911,13 +911,14 @@ export default function LeadsView() {
   });
 
   const statusColors: Record<LeadStatus, string> = {
-    'New': 'bg-blue-100 text-blue-700',
-    'Contacted': 'bg-amber-100 text-amber-700',
+    'New Lead': 'bg-blue-100 text-blue-700',
+    'Contact': 'bg-amber-100 text-amber-700',
     'Follow-up': 'bg-purple-100 text-purple-700',
     'Consultation Booked': 'bg-indigo-100 text-indigo-700',
     'Counseling Done': 'bg-teal-100 text-teal-700',
-    'Demo Class': 'bg-pink-100 text-pink-700',
+    'Demo Class Booked': 'bg-pink-100 text-pink-700',
     'Payment Pending': 'bg-orange-100 text-orange-700',
+    'Re-engagement Offer': 'bg-fuchsia-100 text-fuchsia-700',
     'Enrolled': 'bg-emerald-100 text-emerald-700',
     'Discarded': 'bg-slate-100 text-slate-700',
   };
@@ -978,13 +979,14 @@ export default function LeadsView() {
                 className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700"
               >
                 <option value="All">All Statuses</option>
-                <option value="New">New</option>
-                <option value="Contacted">Contacted</option>
+                <option value="New Lead">New Lead</option>
+                <option value="Contact">Contact</option>
                 <option value="Follow-up">Follow-up</option>
                 <option value="Consultation Booked">Consultation Booked</option>
                 <option value="Counseling Done">Counseling Done</option>
-                <option value="Demo Class">Demo Class</option>
+                <option value="Demo Class Booked">Demo Class Booked</option>
                 <option value="Payment Pending">Payment Pending</option>
+                <option value="Re-engagement Offer">Re-engagement Offer</option>
                 <option value="Enrolled">Enrolled</option>
                 <option value="Discarded">Discarded</option>
               </select>
@@ -1083,13 +1085,14 @@ export default function LeadsView() {
                   className="text-xs font-bold text-slate-700 bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
                 >
                   <option value="" disabled>Select Status...</option>
-                  <option value="New">New</option>
-                  <option value="Contacted">Contacted</option>
+                  <option value="New Lead">New Lead</option>
+                  <option value="Contact">Contact</option>
                   <option value="Follow-up">Follow-up</option>
                   <option value="Consultation Booked">Consultation Booked</option>
                   <option value="Counseling Done">Counseling Done</option>
-                  <option value="Demo Class">Demo Class</option>
+                  <option value="Demo Class Booked">Demo Class Booked</option>
                   <option value="Payment Pending">Payment Pending</option>
+                  <option value="Re-engagement Offer">Re-engagement Offer</option>
                   <option value="Enrolled">Enrolled</option>
                   <option value="Discarded">Discarded</option>
                 </select>
@@ -1304,13 +1307,14 @@ export default function LeadsView() {
                           onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
                           className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 cursor-pointer ${statusColors[lead.status]}`}
                         >
-                          <option value="New">New</option>
-                          <option value="Contacted">Contacted</option>
+                          <option value="New Lead">New Lead</option>
+                          <option value="Contact">Contact</option>
                           <option value="Follow-up">Follow-up</option>
                           <option value="Consultation Booked">Consultation Booked</option>
                           <option value="Counseling Done">Counseling Done</option>
-                          <option value="Demo Class">Demo Class</option>
+                          <option value="Demo Class Booked">Demo Class Booked</option>
                           <option value="Payment Pending">Payment Pending</option>
+                          <option value="Re-engagement Offer">Re-engagement Offer</option>
                           <option value="Enrolled">Enrolled</option>
                           <option value="Discarded">Discarded</option>
                         </select>

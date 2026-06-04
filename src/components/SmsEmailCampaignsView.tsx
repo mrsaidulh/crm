@@ -47,13 +47,17 @@ export default function SmsEmailCampaignsView() {
 
   const getTargetedLeads = () => {
     return leads.filter(lead => {
+      const status = lead.status as string;
       if (audience === 'All Contacts') return true;
-      if (audience === 'New Leads') return lead.status === 'New';
-      if (audience === 'Enrolled Students') return lead.status === 'Enrolled';
-      if (audience === 'Follow-up Required') return lead.status === 'Follow-up';
-      if (audience === 'Consultation Booked') return lead.status === 'Consultation Booked';
-      if (audience === 'Payment Pending') return lead.status === 'Payment Pending';
-      if (audience === 'Discarded Leads') return lead.status === 'Discarded';
+      if (audience === 'New Leads') return status === 'New Lead' || status === 'New';
+      if (audience === 'Contacted Leads') return status === 'Contact' || status === 'Contacted';
+      if (audience === 'Follow-up Required') return status === 'Follow-up';
+      if (audience === 'Consultation Booked') return status === 'Consultation Booked';
+      if (audience === 'Demo Class Booked') return status === 'Demo Class Booked' || status === 'Demo Class';
+      if (audience === 'Payment Pending') return status === 'Payment Pending';
+      if (audience === 'Re-engagement Offer') return status === 'Re-engagement Offer';
+      if (audience === 'Enrolled Students') return status === 'Enrolled';
+      if (audience === 'Discarded Leads') return status === 'Discarded';
       return false;
     });
   };
@@ -159,9 +163,12 @@ export default function SmsEmailCampaignsView() {
               >
                 <option value="All Contacts">All Contacts</option>
                 <option value="New Leads">New Leads</option>
+                <option value="Contacted Leads">Contact/Contacted Leads</option>
                 <option value="Follow-up Required">Follow-up Required</option>
                 <option value="Consultation Booked">Consultation Booked</option>
+                <option value="Demo Class Booked">Demo Class Booked</option>
                 <option value="Payment Pending">Payment Pending</option>
+                <option value="Re-engagement Offer">Re-engagement Offer list</option>
                 <option value="Enrolled Students">Enrolled Students</option>
                 <option value="Discarded Leads">Discarded Leads</option>
               </select>

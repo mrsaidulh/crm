@@ -5,16 +5,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { logAuditEvent } from '../utils/auditLogger';
 import type { Lead, LeadStatus } from '../types';
 
-const STATUSES: LeadStatus[] = ['New', 'Contacted', 'Consultation Booked', 'Demo Class', 'Payment Pending', 'Enrolled', 'Discarded'];
+const STATUSES: LeadStatus[] = ['New Lead', 'Contact', 'Consultation Booked', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Discarded'];
 
 const STATUS_COLORS: Record<LeadStatus, { bg: string; text: string; border: string; accent: string; dot: string; glow: string }> = {
-  'New': { bg: 'bg-indigo-50/80', text: 'text-indigo-700', border: 'border-indigo-100', accent: 'bg-indigo-600', dot: 'bg-indigo-500', glow: 'shadow-indigo-100/50' },
-  'Contacted': { bg: 'bg-blue-50/80', text: 'text-blue-700', border: 'border-blue-100', accent: 'bg-blue-600', dot: 'bg-blue-500', glow: 'shadow-blue-100/50' },
+  'New Lead': { bg: 'bg-indigo-50/80', text: 'text-indigo-700', border: 'border-indigo-100', accent: 'bg-indigo-600', dot: 'bg-indigo-500', glow: 'shadow-indigo-100/50' },
+  'Contact': { bg: 'bg-blue-50/80', text: 'text-blue-700', border: 'border-blue-100', accent: 'bg-blue-600', dot: 'bg-blue-500', glow: 'shadow-blue-100/50' },
   'Follow-up': { bg: 'bg-amber-50/80', text: 'text-amber-700', border: 'border-amber-100', accent: 'bg-amber-600', dot: 'bg-amber-500', glow: 'shadow-amber-100/50' },
   'Consultation Booked': { bg: 'bg-orange-50/80', text: 'text-orange-700', border: 'border-orange-100', accent: 'bg-orange-600', dot: 'bg-orange-500', glow: 'shadow-orange-100/50' },
   'Counseling Done': { bg: 'bg-cyan-50/80', text: 'text-cyan-700', border: 'border-cyan-100', accent: 'bg-cyan-600', dot: 'bg-cyan-500', glow: 'shadow-cyan-100/50' },
-  'Demo Class': { bg: 'bg-purple-50/80', text: 'text-purple-700', border: 'border-purple-100', accent: 'bg-purple-600', dot: 'bg-purple-500', glow: 'shadow-purple-100/50' },
+  'Demo Class Booked': { bg: 'bg-purple-50/80', text: 'text-purple-700', border: 'border-purple-100', accent: 'bg-purple-600', dot: 'bg-purple-500', glow: 'shadow-purple-100/50' },
   'Payment Pending': { bg: 'bg-rose-50/80', text: 'text-rose-700', border: 'border-rose-100', accent: 'bg-rose-600', dot: 'bg-rose-500', glow: 'shadow-rose-100/50' },
+  'Re-engagement Offer': { bg: 'bg-pink-50/80', text: 'text-pink-700', border: 'border-pink-100', accent: 'bg-pink-600', dot: 'bg-pink-500', glow: 'shadow-pink-100/50' },
   'Enrolled': { bg: 'bg-emerald-50/80', text: 'text-emerald-700', border: 'border-emerald-100', accent: 'bg-emerald-600', dot: 'bg-emerald-500', glow: 'shadow-emerald-100/50' },
   'Discarded': { bg: 'bg-slate-50/80', text: 'text-slate-700', border: 'border-slate-100', accent: 'bg-slate-600', dot: 'bg-slate-500', glow: 'shadow-slate-100/50' }
 };

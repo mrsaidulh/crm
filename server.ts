@@ -31,7 +31,9 @@ function getMetaEventFromStatus(status: string, mapping: Record<string, string> 
   }
   switch (status) {
     case 'New':
+    case 'New Lead':
       return 'Lead';
+    case 'Contact':
     case 'Contacted':
     case 'Follow-up':
       return 'Contact';
@@ -39,9 +41,12 @@ function getMetaEventFromStatus(status: string, mapping: Record<string, string> 
       return 'Schedule';
     case 'Counseling Done':
     case 'Demo Class':
+    case 'Demo Class Booked':
       return 'SubmitApplication';
     case 'Payment Pending':
       return 'InitiateCheckout';
+    case 'Re-engagement Offer':
+      return 'Contact';
     case 'Enrolled':
       return 'Purchase';
     default:
@@ -57,7 +62,9 @@ function getGoogleEventFromStatus(status: string, mapping: Record<string, string
   }
   switch (status) {
     case 'New':
+    case 'New Lead':
       return 'generate_lead';
+    case 'Contact':
     case 'Contacted':
     case 'Follow-up':
       return 'contact';
@@ -65,9 +72,12 @@ function getGoogleEventFromStatus(status: string, mapping: Record<string, string
       return 'schedule';
     case 'Counseling Done':
     case 'Demo Class':
+    case 'Demo Class Booked':
       return 'submit_application';
     case 'Payment Pending':
       return 'begin_checkout';
+    case 'Re-engagement Offer':
+      return 'contact';
     case 'Enrolled':
       return 'purchase';
     default:
@@ -119,7 +129,7 @@ async function triggerMetaConversionEvent(
           },
           custom_data: {
             lead_id: lead.id,
-            status: lead.status || 'New',
+            status: lead.status || 'New Lead',
             source: lead.source || 'Direct',
             course: lead.targetCourse || 'IELTS Academic',
             ...customData
@@ -178,7 +188,7 @@ async function triggerGoogleConversionEvent(
               value: customData.value || lead.expectedValue || 150,
               currency: 'USD',
               lead_id: lead.id,
-              status: lead.status || 'New',
+              status: lead.status || 'New Lead',
               source: lead.source || 'Direct',
               course: lead.targetCourse || 'IELTS Academic',
               engagement_time_msec: 100,
@@ -405,7 +415,7 @@ app.post('/api/leads', async (req, res) => {
     try {
       const uId = newLead.userId || 'ielts_crm_main_user';
       const uSettings = await dbService.getSettings(uId);
-      const evName = getMetaEventFromStatus('New', uSettings?.metaMapping);
+      const evName = getMetaEventFromStatus('New Lead', uSettings?.metaMapping);
       if (evName) {
         await triggerMetaConversionEvent(uId, evName, newLead);
       }
@@ -417,7 +427,7 @@ app.post('/api/leads', async (req, res) => {
     try {
       const uId = newLead.userId || 'ielts_crm_main_user';
       const uSettings = await dbService.getSettings(uId);
-      const evName = getGoogleEventFromStatus('New', uSettings?.googleMapping);
+      const evName = getGoogleEventFromStatus('New Lead', uSettings?.googleMapping);
       if (evName) {
         await triggerGoogleConversionEvent(uId, evName, newLead);
       }
@@ -643,7 +653,7 @@ app.get('/api/stats', async (req, res) => {
     const leadsList = await dbService.getLeads(userId);
     
     const totalLeads = leadsList.length;
-    const newLeads = leadsList.filter((l: any) => l.status === 'New').length;
+    const newLeads = leadsList.filter((l: any) => l.status === 'New Lead' || l.status === 'New').length;
     const enrolled = leadsList.filter((l: any) => l.status === 'Enrolled').length;
     
     const bySource = leadsList.reduce((acc: any, lead: any) => {
@@ -740,7 +750,7 @@ app.post('/api/meta/test-event', async (req, res) => {
       name: 'John Doe Test',
       email: 'john.doe.test@ieltsrev.com',
       phone: '+8801812345678',
-      status: 'New',
+      status: 'New Lead',
       source: 'Facebook Ads',
       targetCourse: 'IELTS Academic'
     };
@@ -963,7 +973,7 @@ IELTS Specialist Desk"
 ---
 
 ### 🎯 Meta Conversions coupling strategy & Trigger
-*   **Recommended Event:** \`${lead.status === 'New' ? 'Lead' : lead.status === 'Enrolled' ? 'Purchase' : 'Contact'}\`
+*   **Recommended Event:** \`${((lead.status as string) === 'New Lead' || (lead.status as string) === 'New') ? 'Lead' : lead.status === 'Enrolled' ? 'Purchase' : 'Contact'}\`
 *   **Reasoning:** Mapping is beautifully aligned with your CRM status pipeline.
 *   **Recommended Conversion Value:** $${lead.expectedValue || '150'} USD.`;
 
