@@ -735,6 +735,30 @@ export default function SettingsView() {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (settings.googleEnabled) {
+      const hasGA4 = !!settings.googleMeasurementId || !!settings.googleApiSecret;
+      const hasAds = !!settings.googleConversionId || !!settings.googleConversionLabel;
+
+      if (!hasGA4 && !hasAds) {
+        setSaveMessage('Error: You must configure at least one active Google credentials group (GA4 or Google Ads).');
+        setTimeout(() => setSaveMessage(''), 6000);
+        return;
+      }
+
+      if (hasGA4 && (!settings.googleMeasurementId?.trim() || !settings.googleApiSecret?.trim())) {
+        setSaveMessage('Error: Both GA4 Measurement ID and API Secret are mandatory for GA4 offline tracking.');
+        setTimeout(() => setSaveMessage(''), 6000);
+        return;
+      }
+
+      if (hasAds && (!settings.googleConversionId?.trim() || !settings.googleConversionLabel?.trim())) {
+        setSaveMessage('Error: Both Conversion ID and Conversion Label are mandatory for Google Ads offline tracking.');
+        setTimeout(() => setSaveMessage(''), 6000);
+        return;
+      }
+    }
+
     setSaving(true);
     setSaveMessage('');
     try {
@@ -1758,13 +1782,14 @@ export default function SettingsView() {
                         Bridge the loop between counselor actions & Google Ads smart bidding systems using GA4 Measurement Protocol server signals.
                       </p>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                            GA4 Measurement ID (Optional)
+                            GA4 Measurement ID <span className="text-red-500">*</span> <span className="text-[10px] font-normal text-slate-400 font-sans tracking-normal">(Required for Analytics)</span>
                           </label>
                           <input 
                             type="text" 
+                            required={!!settings.googleMeasurementId || !!settings.googleApiSecret}
                             value={settings.googleMeasurementId || ''}
                             onChange={(e) => setSettings({ ...settings, googleMeasurementId: e.target.value })}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
@@ -1773,10 +1798,11 @@ export default function SettingsView() {
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                            GA4 Measurement Protocol API Secret (Optional)
+                            GA4 Measurement Protocol API Secret <span className="text-red-500">*</span> <span className="text-[10px] font-normal text-slate-400 font-sans tracking-normal">(Required for Analytics)</span>
                           </label>
                           <input 
                             type="password" 
+                            required={!!settings.googleMeasurementId || !!settings.googleApiSecret}
                             value={settings.googleApiSecret || ''}
                             onChange={(e) => setSettings({ ...settings, googleApiSecret: e.target.value })}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
@@ -1785,10 +1811,11 @@ export default function SettingsView() {
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                            Google Ads Conversion ID (Optional)
+                            Google Ads Conversion ID <span className="text-red-500">*</span> <span className="text-[10px] font-normal text-slate-400 font-sans tracking-normal">(Required for Google Ads)</span>
                           </label>
                           <input 
                             type="text" 
+                            required={!!settings.googleConversionId || !!settings.googleConversionLabel}
                             value={settings.googleConversionId || ''}
                             onChange={(e) => setSettings({ ...settings, googleConversionId: e.target.value })}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
@@ -1797,10 +1824,11 @@ export default function SettingsView() {
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                            Google Ads Conversion Label (Optional)
+                            Google Ads Conversion Label <span className="text-red-500">*</span> <span className="text-[10px] font-normal text-slate-400 font-sans tracking-normal">(Required for Google Ads)</span>
                           </label>
                           <input 
                             type="text" 
+                            required={!!settings.googleConversionId || !!settings.googleConversionLabel}
                             value={settings.googleConversionLabel || ''}
                             onChange={(e) => setSettings({ ...settings, googleConversionLabel: e.target.value })}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-slate-800"
@@ -1937,26 +1965,7 @@ export default function SettingsView() {
                   )}
                 </div>
 
-                <div className="pt-6 border-t border-slate-100">
-                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5">
-                        <Cpu className="w-4 h-4 text-orange-500 animate-pulse" />
-                        Dedicated n8n Automation Hub
-                      </h4>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-lg">
-                        We have migrated and upgraded the webhook parameters into a dedicated workspace. Manage endpoints, view sample payloads, and execute live testing triggers from the new action center.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('n8n')}
-                      className="text-xs bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2 rounded-xl transition-all shadow-xs shrink-0 self-end sm:self-auto"
-                    >
-                      Open n8n Workspace →
-                    </button>
-                  </div>
-                </div>
+
 
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                   <div>
