@@ -32,7 +32,7 @@ export async function triggerWebhookProxy(webhookUrl: string, event: string, dat
 }
 
 /**
- * Triggers global n8n webhooks configured in CRM settings.
+ * Triggers global webhooks (n8n, Zapier, Make, and Custom) configured in CRM settings.
  */
 export async function triggerGlobalWebhook(
   userId: string,
@@ -48,23 +48,52 @@ export async function triggerGlobalWebhook(
     const settings = resData.settings as UserSettings;
     if (!settings) return;
 
-    let url: string | undefined;
+    const urls: { url: string; platform: string }[] = [];
 
-    switch (event) {
-      case 'Lead Created':
-        url = settings.n8nLeadCreatedUrl;
-        break;
-      case 'Lead Status Changed':
-        url = settings.n8nStatusChangedUrl;
-        break;
-      case 'Task Reminder':
-        url = settings.n8nTaskReminderUrl;
-        break;
+    // 1. n8n webhooks
+    if (event === 'Lead Created' && settings.n8nLeadCreatedUrl) {
+      urls.push({ url: settings.n8nLeadCreatedUrl, platform: 'n8n' });
+    }
+    if (event === 'Lead Status Changed' && settings.n8nStatusChangedUrl) {
+      urls.push({ url: settings.n8nStatusChangedUrl, platform: 'n8n' });
+    }
+    if (event === 'Task Reminder' && settings.n8nTaskReminderUrl) {
+      urls.push({ url: settings.n8nTaskReminderUrl, platform: 'n8n' });
     }
 
-    if (url) {
-      console.log(`Triggering global n8n Webhook for event: ${event}`);
-      await triggerWebhookProxy(url, event, data);
+    // 2. Zapier webhooks
+    if (event === 'Lead Created' && settings.zapierLeadCreatedUrl) {
+      urls.push({ url: settings.zapierLeadCreatedUrl, platform: 'Zapier' });
+    }
+    if (event === 'Lead Status Changed' && settings.zapierStatusChangedUrl) {
+      urls.push({ url: settings.zapierStatusChangedUrl, platform: 'Zapier' });
+    }
+
+    // 3. Make.com webhooks
+    if (event === 'Lead Created' && settings.makeLeadCreatedUrl) {
+      urls.push({ url: settings.makeLeadCreatedUrl, platform: 'Make.com' });
+    }
+    if (event === 'Lead Status Changed' && settings.makeStatusChangedUrl) {
+      urls.push({ url: settings.makeStatusChangedUrl, platform: 'Make.com' });
+    }
+
+    // 4. Custom webhooks
+    if (settings.customWebhookUrl) {
+      const subs = settings.customWebhookEvents || [];
+      if (subs.includes(event)) {
+        urls.push({ url: settings.customWebhookUrl, platform: 'Custom Webhook' });
+      }
+    }
+
+    if (urls.length > 0) {
+      console.log(`Triggering ${urls.length} webhooks for event: ${event}`);
+      for (const item of urls) {
+        console.log(`Triggering global ${item.platform} Webhook at URL: ${item.url}`);
+        // Fire of call async, don't let one failure block others
+        triggerWebhookProxy(item.url, event, data).catch(err => {
+          console.error(`Error triggering ${item.platform} webhook at ${item.url}:`, err);
+        });
+      }
     }
   } catch (error) {
     console.error(`Error in triggerGlobalWebhook for ${event}:`, error);
