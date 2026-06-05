@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Shield, Bell, Key, Save, AlertCircle, Users, Plus, Edit2, Trash2, KeyRound, Database, CheckCircle2, ServerCrash, Cpu, Activity, Cloud, RefreshCw, Power, ShieldAlert, Lock, Unlock, Timer, Check, Copy, Tag, Webhook } from 'lucide-react';
+import { User, Shield, Bell, Key, Save, AlertCircle, Users, Plus, Edit2, Trash2, KeyRound, Database, CheckCircle2, ServerCrash, Cpu, Activity, Cloud, RefreshCw, Power, ShieldAlert, Lock, Unlock, Timer, Check, Copy, Tag } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { TOTP } from 'totp-generator';
 import type { UserSettings, TeamMember } from '../types';
@@ -7,7 +7,7 @@ import { useAuth } from '../lib/AuthContext';
 import { firebaseService, initFirebase, disconnectFirebase } from '../lib/firebaseService';
 import { triggerWebhookProxy } from '../utils/automation';
 
-type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'n8n' | 'database' | 'webhooks';
+type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'n8n' | 'database';
 
 function LiveMetaTestBlock({ settings }: { settings: UserSettings }) {
   const [testing, setTesting] = useState(false);
@@ -369,19 +369,14 @@ export default function SettingsView() {
   const [sourcesSaving, setSourcesSaving] = useState(false);
   const [sourcesMessage, setSourcesMessage] = useState('');
 
-  // Webhook Testing states
+  // n8n Webhook Testing states
   const [testResults, setTestResults] = useState<Record<string, { status: 'idle' | 'success' | 'error' | 'loading'; message?: string }>>({
     created: { status: 'idle' },
     status: { status: 'idle' },
-    reminder: { status: 'idle' },
-    zapier_created: { status: 'idle' },
-    zapier_status: { status: 'idle' },
-    make_created: { status: 'idle' },
-    make_status: { status: 'idle' },
-    custom_webhook: { status: 'idle' }
+    reminder: { status: 'idle' }
   });
 
-  const handleTestWebhook = async (type: string, url: string | undefined, forceEvent?: 'created' | 'status' | 'reminder') => {
+  const handleTestWebhook = async (type: 'created' | 'status' | 'reminder', url: string | undefined) => {
     if (!url || !url.trim()) {
       alert('Please enter a webhook URL first before sending a test.');
       return;
@@ -395,9 +390,7 @@ export default function SettingsView() {
     let eventStr = '';
     let mockPayload: any = {};
 
-    const resolvedEvent = forceEvent || (type.includes('created') ? 'created' : type.includes('status') ? 'status' : 'reminder');
-
-    if (resolvedEvent === 'created') {
+    if (type === 'created') {
       eventStr = 'Lead Created';
       mockPayload = {
         id: 'lead_test_101',
@@ -446,7 +439,7 @@ export default function SettingsView() {
       } else {
         setTestResults(prev => ({
           ...prev,
-          [type]: { status: 'error', message: 'Failed: Remote webhook receiver returned a non-success status code' }
+          [type]: { status: 'error', message: 'Failed: n8n webhook responded with non-200 code' }
         }));
       }
     } catch (err: any) {
@@ -901,9 +894,6 @@ export default function SettingsView() {
           </button>
           <button onClick={() => setActiveTab('n8n')} className={navItemClass('n8n')}>
             <Cpu className="w-4 h-4 text-orange-500" /> n8n Automation
-          </button>
-          <button onClick={() => setActiveTab('webhooks')} className={navItemClass('webhooks')}>
-            <Webhook className="w-4 h-4 text-emerald-500" strokeWidth={2.5} /> Webhooks
           </button>
           <button onClick={() => setActiveTab('sources')} className={navItemClass('sources')}>
             <Tag className="w-4 h-4" /> Custom Lead Sources
@@ -2333,273 +2323,6 @@ export default function SettingsView() {
                   >
                     <Save className="w-4 h-4" />
                     {saving ? 'Saving...' : 'Save Webhooks'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {activeTab === 'webhooks' && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in duration-350 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                    <Webhook className="w-5 h-5 text-emerald-600 animate-pulse" />
-                    Zapier & Make Webhooks Hub
-                  </h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Connect and test your workflows on external systems like Zapier or Make.
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl text-emerald-800 font-semibold shadow-xs">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping shrink-0" />
-                  Active Outgoing Webhooks
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-emerald-50/20 to-white border border-emerald-100/40 rounded-2xl p-5 space-y-3">
-                <p className="text-slate-600 text-xs leading-relaxed">
-                  Easily integrate candidate registrations and lead status changes with popular SaaS automation platforms. Pasting webhook URLs generated from your <strong>Zapier Triggers</strong> or <strong>Make (Integromat) Custom Webhook nodes</strong> enables high-performance synchronization without coding.
-                </p>
-              </div>
-
-              <form onSubmit={handleSaveSettings} className="space-y-6">
-                
-                {/* 1. ZAPIER SECTION */}
-                <div className="border border-slate-200/80 rounded-2xl p-5 space-y-4 bg-slate-50/10">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <div className="w-7 h-7 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 font-sans">Z</div>
-                    <h3 className="text-sm font-bold text-slate-800">Zapier Real-time Triggers</h3>
-                  </div>
-
-                  {/* Zapier - Lead Created */}
-                  <div className="space-y-3 bg-white p-4 border border-slate-100 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">Lead Created Webhook URL</span>
-                      <span className="text-[10px] text-slate-400 font-mono">triggers on new registrations</span>
-                    </div>
-                    <input 
-                      type="url"
-                      value={settings.zapierLeadCreatedUrl || ''}
-                      onChange={(e) => setSettings({ ...settings, zapierLeadCreatedUrl: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-mono placeholder:font-sans bg-slate-50/10"
-                      placeholder="https://hooks.zapier.com/hooks/catch/12345/abcde/"
-                    />
-                    <div className="flex items-center justify-between gap-3 pt-2">
-                      <p className="text-[11px] text-slate-500">Sends standard lead attributes (name, email, phone, notes...)</p>
-                      <button
-                        type="button"
-                        disabled={testResults.zapier_created?.status === 'loading'}
-                        onClick={() => handleTestWebhook('zapier_created', settings.zapierLeadCreatedUrl, 'created')}
-                        className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                      >
-                        {testResults.zapier_created?.status === 'loading' ? 'Sending...' : 'Test trigger'}
-                      </button>
-                    </div>
-
-                    {testResults.zapier_created?.status !== 'idle' && testResults.zapier_created && (
-                      <div className={`p-3 rounded-xl border text-xs leading-relaxed mt-2 ${
-                        testResults.zapier_created.status === 'success' ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' : 'bg-rose-50/60 border-rose-100 text-rose-800'
-                      }`}>
-                        {testResults.zapier_created.message}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Zapier - Status Changed */}
-                  <div className="space-y-3 bg-white p-4 border border-slate-100 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">Lead Status Changed Webhook URL</span>
-                      <span className="text-[10px] text-slate-400 font-mono font-normal">triggers on status progression</span>
-                    </div>
-                    <input 
-                      type="url"
-                      value={settings.zapierStatusChangedUrl || ''}
-                      onChange={(e) => setSettings({ ...settings, zapierStatusChangedUrl: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-mono placeholder:font-sans bg-slate-50/10"
-                      placeholder="https://hooks.zapier.com/hooks/catch/12345/fghjk/"
-                    />
-                    <div className="flex items-center justify-between gap-3 pt-2">
-                      <p className="text-[11px] text-slate-500">Sends status progression data and target course parameters</p>
-                      <button
-                        type="button"
-                        disabled={testResults.zapier_status?.status === 'loading'}
-                        onClick={() => handleTestWebhook('zapier_status', settings.zapierStatusChangedUrl, 'status')}
-                        className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                      >
-                        {testResults.zapier_status?.status === 'loading' ? 'Sending...' : 'Test trigger'}
-                      </button>
-                    </div>
-
-                    {testResults.zapier_status?.status !== 'idle' && testResults.zapier_status && (
-                      <div className={`p-3 rounded-xl border text-xs leading-relaxed mt-2 ${
-                        testResults.zapier_status.status === 'success' ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' : 'bg-rose-50/60 border-rose-100 text-rose-800'
-                      }`}>
-                        {testResults.zapier_status.message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. MAKE.COM SECTION */}
-                <div className="border border-slate-200/80 rounded-2xl p-5 space-y-4 bg-slate-50/10">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <div className="w-7 h-7 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 font-sans">M</div>
-                    <h3 className="text-sm font-bold text-slate-800">Make.com Scenario Sync</h3>
-                  </div>
-
-                  {/* Make.com - Lead Created */}
-                  <div className="space-y-3 bg-white p-4 border border-slate-100 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">Lead Created Webhook URL</span>
-                      <span className="text-[10px] text-slate-400 font-mono">custom webhook node</span>
-                    </div>
-                    <input 
-                      type="url"
-                      value={settings.makeLeadCreatedUrl || ''}
-                      onChange={(e) => setSettings({ ...settings, makeLeadCreatedUrl: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-mono placeholder:font-sans bg-slate-50/10"
-                      placeholder="https://hook.us1.make.com/abcdefghijklmnop"
-                    />
-                    <div className="flex items-center justify-between gap-3 pt-2">
-                      <p className="text-[11px] text-slate-500">Forwards fully structured payload including target score goals</p>
-                      <button
-                        type="button"
-                        disabled={testResults.make_created?.status === 'loading'}
-                        onClick={() => handleTestWebhook('make_created', settings.makeLeadCreatedUrl, 'created')}
-                        className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                      >
-                        {testResults.make_created?.status === 'loading' ? 'Sending...' : 'Test trigger'}
-                      </button>
-                    </div>
-
-                    {testResults.make_created?.status !== 'idle' && testResults.make_created && (
-                      <div className={`p-3 rounded-xl border text-xs leading-relaxed mt-2 ${
-                        testResults.make_created.status === 'success' ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' : 'bg-rose-50/60 border-rose-100 text-rose-800'
-                      }`}>
-                        {testResults.make_created.message}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Make.com - Status Changed */}
-                  <div className="space-y-3 bg-white p-4 border border-slate-150 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">Lead Status Changed Webhook URL</span>
-                      <span className="text-[10px] text-slate-400 font-mono">triggered on step progression</span>
-                    </div>
-                    <input 
-                      type="url"
-                      value={settings.makeStatusChangedUrl || ''}
-                      onChange={(e) => setSettings({ ...settings, makeStatusChangedUrl: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-mono placeholder:font-sans bg-slate-50/10"
-                      placeholder="https://hook.us1.make.com/qrstuvwxyz0123456"
-                    />
-                    <div className="flex items-center justify-between gap-3 pt-2">
-                      <p className="text-[11px] text-slate-500">Transmits real-time status details for CRM reporting metrics</p>
-                      <button
-                        type="button"
-                        disabled={testResults.make_status?.status === 'loading'}
-                        onClick={() => handleTestWebhook('make_status', settings.makeStatusChangedUrl, 'status')}
-                        className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                      >
-                        {testResults.make_status?.status === 'loading' ? 'Sending...' : 'Test trigger'}
-                      </button>
-                    </div>
-
-                    {testResults.make_status?.status !== 'idle' && testResults.make_status && (
-                      <div className={`p-3 rounded-xl border text-xs leading-relaxed mt-2 ${
-                        testResults.make_status.status === 'success' ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' : 'bg-rose-50/60 border-rose-100 text-rose-800'
-                      }`}>
-                        {testResults.make_status.message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. GENERAL CUSTOM WEBHOOK */}
-                <div className="border border-slate-200/80 rounded-2xl p-5 space-y-4 bg-slate-50/10">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <Webhook className="w-4 h-4 text-slate-600 shrink-0" />
-                    <h3 className="text-sm font-bold text-slate-800">General Custom Outgoing Webhook</h3>
-                  </div>
-
-                  <div className="space-y-4 bg-white p-4 border border-slate-150 rounded-xl">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-semibold text-slate-700">Webhook Target Endpoint URL</label>
-                      <input 
-                        type="url"
-                        value={settings.customWebhookUrl || ''}
-                        onChange={(e) => setSettings({ ...settings, customWebhookUrl: e.target.value })}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-mono placeholder:font-sans bg-slate-50/10"
-                        placeholder="https://yourserver.com/api/crm-events"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-700 block">Subscribed Events</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        {['Lead Created', 'Lead Status Changed', 'Task Reminder'].map((ev) => {
-                          const subs = settings.customWebhookEvents || [];
-                          const isSubscribed = subs.includes(ev);
-                          return (
-                            <label key={ev} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
-                              <input 
-                                type="checkbox"
-                                checked={isSubscribed}
-                                onChange={(e) => {
-                                  const updatedSubs = e.target.checked 
-                                    ? [...subs, ev]
-                                    : subs.filter((s) => s !== ev);
-                                  setSettings({ ...settings, customWebhookEvents: updatedSubs });
-                                }}
-                                className="w-4 h-4 text-emerald-650 border-slate-305 rounded focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
-                              />
-                              <span>{ev}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 pt-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <p className="text-[11px] text-slate-500">Fires custom payload containing complete action variables</p>
-                      <button
-                        type="button"
-                        disabled={testResults.custom_webhook?.status === 'loading'}
-                        onClick={() => handleTestWebhook('custom_webhook', settings.customWebhookUrl, 'created')}
-                        className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                      >
-                        {testResults.custom_webhook?.status === 'loading' ? 'Sending...' : 'Test custom hook'}
-                      </button>
-                    </div>
-
-                    {testResults.custom_webhook?.status !== 'idle' && testResults.custom_webhook && (
-                      <div className={`p-3 rounded-xl border text-xs leading-relaxed mt-2 ${
-                        testResults.custom_webhook.status === 'success' ? 'bg-emerald-50/60 border-emerald-100 text-emerald-800' : 'bg-rose-50/60 border-rose-100 text-rose-800'
-                      }`}>
-                        {testResults.custom_webhook.message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Save Bar */}
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <div>
-                    {saveMessage && (
-                      <span className={`text-sm ${saveMessage.includes('Error') ? 'text-rose-500' : 'text-emerald-600'}`}>
-                        {saveMessage}
-                      </span>
-                    )}
-                  </div>
-                  <button 
-                    type="submit" 
-                    disabled={saving}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm disabled:opacity-75 cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Webhook Gateways'}
                   </button>
                 </div>
               </form>

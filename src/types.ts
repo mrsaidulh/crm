@@ -145,14 +145,6 @@ export interface UserSettings {
   googleMeasurementId?: string;
   googleApiSecret?: string;
   googleMapping?: Record<string, string>;
-
-  // Zapier, Make.com and Custom Webhooks Configuration
-  zapierLeadCreatedUrl?: string;
-  zapierStatusChangedUrl?: string;
-  makeLeadCreatedUrl?: string;
-  makeStatusChangedUrl?: string;
-  customWebhookUrl?: string;
-  customWebhookEvents?: string[];
 }
 
 export interface WorkflowRule {
