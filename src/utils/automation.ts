@@ -1,4 +1,5 @@
 import type { UserSettings, WorkflowRule } from '../types';
+import { logAuditEvent } from './auditLogger';
 
 /**
  * Triggers a webhook using our Node/Express backend proxy to overcome CORS restrictions.
@@ -72,6 +73,101 @@ export async function triggerGlobalWebhook(
 }
 
 /**
+ * Triggers email alerts to CRM administrators when a new lead is added or lead status changes.
+ */
+export async function alertCRMAdministrators(
+  userId: string,
+  event: 'Lead Created' | 'Lead Status Changed',
+  newValue: string,
+  lead: any
+): Promise<void> {
+  try {
+    const adminEmails = new Set<string>();
+    
+    // Add default admin emails
+    adminEmails.add('toieltsrevolution@gmail.com');
+    adminEmails.add('saidulgmac@gmail.com');
+    
+    // Attempt to dynamically fetch and append email addresses of Admins and Super Admins
+    try {
+      const response = await fetch(`/api/team-members?userId=${encodeURIComponent(userId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        const members = data.teamMembers || [];
+        for (const m of members) {
+          if (m && m.email && (m.role === 'Admin' || m.role === 'Super Admin' || m.role.toLowerCase().includes('admin'))) {
+            adminEmails.add(m.email.trim().toLowerCase());
+          }
+        }
+      }
+    } catch (teamError) {
+      console.warn('Could not fetch team members for admin notification fallback:', teamError);
+    }
+    
+    // Send email alert to each unique administrator email
+    for (const email of adminEmails) {
+      const subject = event === 'Lead Created'
+        ? `🚨 [CRM Alert] New Lead Captured: "${lead.name || 'N/A'}"`
+        : `🔄 [CRM Alert] Lead Status Updated: "${lead.name || 'N/A'}" (${newValue})`;
+        
+      const body = `
+Hello CRM Administrator,
+
+An automated event has been recorded in your IELTS CRM system.
+
+Event Details:
+------------------------------------------
+Type: ${event === 'Lead Created' ? 'New Lead Registered' : 'Lead Status Transitioned'}
+Details: ${event === 'Lead Created' ? `A new lead has completed registration or been entered into the system.` : `Lead status has changed to "${newValue}".`}
+Timestamp: ${new Date().toLocaleString()}
+------------------------------------------
+
+Lead Profile:
+- Full Name: ${lead.name || 'N/A'}
+- Email: ${lead.email || 'N/A'}
+- Phone: ${lead.phone || 'N/A'}
+- Lead Source: ${lead.source || 'Website Form'}
+- Current Status: ${lead.status || newValue || 'New'}
+- Target Course: ${lead.targetCourse || 'N/A'}
+- Target Band Score: ${lead.targetBand || 'N/A'}
+- Destination Country: ${lead.destination || 'N/A'}
+
+Additional Information:
+- Current Expected Pipeline Value: $${lead.expectedValue || '0'}
+- Initial Tags: ${(lead.tags || []).join(', ') || 'None'}
+- Latest Notes: ${lead.notes || 'None entered.'}
+
+Manage this lead online in your IELTS CRM system board.
+      `.trim();
+
+      await fetch('/api/campaigns/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audience: email,
+          subject,
+          body,
+          userId
+        })
+      });
+      
+      console.log(`[Admin Notification] Email notification successfully dispatched to CRM Admin: ${email}`);
+    }
+    
+    // Log consolidated audit log
+    await logAuditEvent({
+      action: 'System notification',
+      entityType: 'lead',
+      entityId: lead.id,
+      details: `Dispatched automated administrator email notification(s) regarding lead "${lead.name || 'N/A'}" (${event}).`
+    });
+
+  } catch (error) {
+    console.error('Error in alertCRMAdministrators:', error);
+  }
+}
+
+/**
  * Evaluates active custom CRM workflows for a user and triggers matches.
  */
 export async function triggerWorkflowAutomations(
@@ -81,6 +177,10 @@ export async function triggerWorkflowAutomations(
   payload: any
 ): Promise<void> {
   if (!userId) return;
+  
+  // Proactively alert CRM administrators via email for new leads or state changes
+  await alertCRMAdministrators(userId, triggerEvent, checkConditionValue, payload);
+
   try {
     const response = await fetch(`/api/workflows?userId=${encodeURIComponent(userId)}`);
     if (!response.ok) return;
@@ -125,6 +225,78 @@ export async function triggerWorkflowAutomations(
             taskType: 'General'
           })
         });
+      } else if ((rule.actionType === 'Send Email' || rule.actionType === 'Send SMS') && rule.actionTemplateId) {
+        // Fetch templates
+        let templates: any[] = [];
+        const templatesRes = await fetch(`/api/templates?userId=${encodeURIComponent(userId)}`);
+        if (templatesRes.ok) {
+          const tData = await templatesRes.json();
+          templates = tData.templates || [];
+        }
+        
+        const template = templates.find(t => t.id === rule.actionTemplateId);
+        if (template) {
+          // Helper to interpolate variables
+          const interpolate = (text: string, data: any) => {
+            if (!text) return '';
+            return text.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+              const trimmedKey = key.trim().toLowerCase();
+              if (trimmedKey === 'name') return data.name || '';
+              if (trimmedKey === 'email') return data.email || '';
+              if (trimmedKey === 'phone') return data.phone || '';
+              if (trimmedKey === 'course' || trimmedKey === 'targetcourse') return data.targetCourse || '';
+              if (trimmedKey === 'band' || trimmedKey === 'targetband') return data.targetBand || '';
+              if (trimmedKey === 'country' || trimmedKey === 'destination') return data.destination || '';
+              return data[key.trim()] || data[key] || '';
+            });
+          };
+
+          const bodyMerged = interpolate(template.body, payload);
+
+          if (rule.actionType === 'Send Email') {
+            const subjectMerged = interpolate(template.subject || '', payload);
+            console.log(`[Auto-Responder] Dispatching Email to ${payload.email || payload.name}`);
+            
+            await fetch('/api/campaigns/email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audience: payload.email || payload.name,
+                subject: subjectMerged,
+                body: bodyMerged,
+                userId: userId
+              })
+            });
+
+            await logAuditEvent({
+              action: 'Workflow Auto-responder',
+              entityType: 'workflow',
+              entityId: rule.id,
+              details: `Auto-responder triggered: Sent Email template "${template.name}" to ${payload.name} (${payload.email})`
+            });
+          } else {
+            console.log(`[Auto-Responder] Dispatching SMS to ${payload.phone || payload.name}`);
+            
+            await fetch('/api/campaigns/sms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audience: payload.phone || payload.name,
+                message: bodyMerged,
+                userId: userId
+              })
+            });
+
+            await logAuditEvent({
+              action: 'Workflow Auto-responder',
+              entityType: 'workflow',
+              entityId: rule.id,
+              details: `Auto-responder triggered: Sent SMS template "${template.name}" to ${payload.name} (${payload.phone})`
+            });
+          }
+        } else {
+          console.warn(`Template with ID ${rule.actionTemplateId} not found for workflow auto-responder.`);
+        }
       }
     }
   } catch (error) {

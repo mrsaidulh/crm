@@ -72,6 +72,16 @@ export default function PublicForm() {
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
+  // Custom Country storage for "Others" selection
+  const [customCountry, setCustomCountry] = useState('');
+  const coreCountries = React.useMemo(() => ['United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'], []);
+
+  useEffect(() => {
+    if (formData.destination && formData.destination !== 'Others' && formData.destination !== 'Other' && !coreCountries.includes(formData.destination)) {
+      setCustomCountry(formData.destination);
+    }
+  }, [formData.destination, coreCountries]);
+  
   // OTP Verification States
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
@@ -273,7 +283,7 @@ export default function PublicForm() {
       }
       case 'targetCourse': {
         if (!value || value === "") {
-          return "Please select a target course";
+          return "Please select a course";
         }
         return "";
       }
@@ -293,8 +303,8 @@ export default function PublicForm() {
         return "";
       }
       case 'destination': {
-        if (!value || value === "") {
-          return "Please select a target country";
+        if (!value || value === "" || value === 'Others' || value === 'Other') {
+          return "Please specify your target country name";
         }
         return "";
       }
@@ -547,14 +557,14 @@ export default function PublicForm() {
 
   // Helper utility to style focus borders based on fields state
   const getInputStyles = (fieldName: keyof typeof errors) => {
-    const base = "w-full border rounded-xl py-3 pl-4 pr-10 text-sm focus:outline-none transition-all duration-200 text-slate-800";
+    const base = "w-full border rounded-lg py-3 pl-4 pr-10 text-sm focus:outline-none transition-all duration-200 text-slate-800 bg-white";
     if (!touched[fieldName]) {
-      return `${base} border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500`;
+      return `${base} border-slate-350 focus:ring-2 focus:ring-[#e31c3d]/15 focus:border-[#e31c3d]`;
     }
     if (errors[fieldName]) {
-      return `${base} border-red-400 bg-red-50/10 focus:ring-2 focus:ring-red-500/20 focus:border-red-500`;
+      return `${base} border-red-400 focus:ring-2 focus:ring-red-500/15 focus:border-red-500`;
     }
-    return `${base} border-emerald-400 bg-emerald-50/10 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`;
+    return `${base} border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500`;
   };
 
   if (status === 'error' && !userId) {
@@ -612,8 +622,13 @@ export default function PublicForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-slate-50 via-slate-100 to-indigo-50/20 flex items-center justify-center p-4 sm:p-8">
+    <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col items-center justify-start pb-12">
       
+      {/* Top Banner Theme in Deep Violet `#23085a` without breadcrumbs */}
+      <div className="w-full bg-[#23085a] py-14 px-4 text-center text-white shadow-inner mb-8">
+        <h1 className="text-3xl font-display font-bold tracking-tight">Contact Us</h1>
+      </div>
+
       {/* Toast Notification for Form Updates */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-2xl shadow-lg border flex items-center gap-2.5 transition-all duration-300 animate-in slide-in-from-top-4 ${
@@ -624,7 +639,7 @@ export default function PublicForm() {
         </div>
       )}
 
-      <div className="bg-white p-6 sm:p-8 border border-slate-200 shadow-2xl shadow-slate-200/40 rounded-3xl w-full max-w-sm sm:max-w-md">
+      <div className="bg-[#f5f6f7] p-6 sm:p-8 border border-neutral-200/80 shadow-md rounded-2xl w-full max-w-sm sm:max-w-md mx-4">
         
         {!isOtpSent ? (
           // STEP 1: Registration Form with interactive validation checks
@@ -633,13 +648,12 @@ export default function PublicForm() {
             {/* CSRF Token (Placeholder protection against Cross-Site Request Forgery) */}
             <input type="hidden" name="_csrf" value="csrf-token-placeholder-xyz123" />
 
-            <div className="text-center mb-6">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 text-xs font-semibold mb-2.5">
-                <GraduationCap className="w-3.5 h-3.5" />
-                IELTS Consultation
-              </span>
-              <h1 className="text-2xl font-display font-black text-slate-900 tracking-tight">Get Free Consultation</h1>
-              <p className="text-xs text-slate-500 mt-2">Enter your consultation details to instantly qualify for online assessment assistance from global tutors.</p>
+            <div className="border-b border-slate-200 pb-3.5 mb-4">
+              <h2 className="font-bold text-slate-800 tracking-tight flex flex-col gap-0.5">
+                <span className="text-2xl font-black text-indigo-950">IELTS Revolution</span>
+                <span className="text-lg font-bold text-[#e31c3d] tracking-wide">Free Consultation</span>
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-1.5">Fill out the fields to submit your study query.</p>
             </div>
 
             {validationError && (
@@ -651,8 +665,8 @@ export default function PublicForm() {
 
             {/* Field 1: Full Name */}
             <div>
-              <label htmlFor="name" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Full Name <span className="text-red-500">*</span>
+              <label htmlFor="name" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Full Name <span className="text-[#e31c3d]">*</span>
               </label>
               <div className="relative">
                 <input 
@@ -687,8 +701,8 @@ export default function PublicForm() {
             
             {/* Field 2: Email Address */}
             <div>
-              <label htmlFor="email" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Email Address <span className="text-red-500">*</span>
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Email Address <span className="text-[#e31c3d]">*</span>
               </label>
               <div className="relative">
                 <input 
@@ -723,8 +737,8 @@ export default function PublicForm() {
 
             {/* Field 3: Phone Number */}
             <div>
-              <label htmlFor="phone" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Phone Number <span className="text-red-500">*</span>
+              <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Phone Number <span className="text-[#e31c3d]">*</span>
               </label>
               <div className="relative">
                 <div className="absolute left-3.5 top-3 flex items-center pointer-events-none">
@@ -763,8 +777,8 @@ export default function PublicForm() {
             {/* Fields 4 & 5 Grid: Course Selection and Target Band */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="targetCourse" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Target Course <span className="text-red-500">*</span>
+                <label htmlFor="targetCourse" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Target Course <span className="text-[#e31c3d]">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -777,9 +791,9 @@ export default function PublicForm() {
                     aria-describedby={touched.targetCourse && errors.targetCourse ? 'course-error' : undefined}
                     className={getInputStyles('targetCourse')}
                   >
-                    <option value="">Select target course</option>
+                    <option value="">Select Course</option>
                     <option value="IELTS Academic">IELTS Academic</option>
-                    <option value="IELTS General Training">IELTS General Training</option>
+                    <option value="IELTS GT">IELTS GT</option>
                     <option value="IELTS UKVI">IELTS UKVI</option>
                     <option value="IELTS Life Skills">IELTS Life Skills</option>
                   </select>
@@ -793,8 +807,8 @@ export default function PublicForm() {
               </div>
 
               <div>
-                <label htmlFor="targetBand" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Target Band <span className="text-red-500">*</span>
+                <label htmlFor="targetBand" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Target Band <span className="text-[#e31c3d]">*</span>
                 </label>
                 <div className="relative">
                   <input 
@@ -833,8 +847,8 @@ export default function PublicForm() {
 
             {/* Field 6: Target Country */}
             <div>
-              <label htmlFor="destination" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Target Country <span className="text-red-500">*</span>
+              <label htmlFor="destination" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Target Country <span className="text-[#e31c3d]">*</span>
               </label>
               <div className="relative">
                 <div className="absolute left-3.5 top-3 flex items-center pointer-events-none">
@@ -843,8 +857,17 @@ export default function PublicForm() {
                 <select
                   id="destination"
                   required
-                  value={formData.destination}
-                  onChange={(e) => handleInputChange('destination', e.target.value)}
+                  value={formData.destination === 'Other' || formData.destination === 'Others' || (!['', 'United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'].includes(formData.destination)) ? 'Others' : formData.destination}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'Others') {
+                      handleInputChange('destination', 'Others');
+                      setCustomCountry('');
+                    } else {
+                      handleInputChange('destination', val);
+                      setCustomCountry('');
+                    }
+                  }}
                   onBlur={() => handleBlur('destination')}
                   aria-invalid={touched.destination && !!errors.destination ? 'true' : 'false'}
                   aria-describedby={touched.destination && errors.destination ? 'destination-error' : undefined}
@@ -858,7 +881,7 @@ export default function PublicForm() {
                   <option value="New Zealand">New Zealand</option>
                   <option value="Germany">Germany</option>
                   <option value="Ireland">Ireland</option>
-                  <option value="Other">Other</option>
+                  <option value="Others">Others</option>
                 </select>
               </div>
               {touched.destination && errors.destination && (
@@ -866,6 +889,28 @@ export default function PublicForm() {
                   <AlertCircle className="w-3 h-3 text-red-400" />
                   {errors.destination}
                 </span>
+              )}
+
+              {/* If others is selected, specify the exact country */}
+              {(formData.destination === 'Others' || formData.destination === 'Other' || (!['', 'United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'].includes(formData.destination) && formData.destination !== '')) && (
+                <div className="mt-3 relative animate-in fade-in duration-250">
+                  <label htmlFor="customCountry" className="block text-xs font-semibold text-slate-500 mb-1.5 pl-0.5">
+                    Please specify country name <span className="text-[#e31c3d]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="customCountry"
+                    placeholder="Enter student's preferred country"
+                    value={customCountry || (formData.destination !== 'Others' && formData.destination !== 'Other' ? formData.destination : '')}
+                    onChange={(e) => {
+                      const userVal = e.target.value;
+                      setCustomCountry(userVal);
+                      setFormData(prev => ({ ...prev, destination: userVal }));
+                    }}
+                    onBlur={() => handleBlur('destination')}
+                    className={`${getInputStyles('destination')} pl-4`}
+                  />
+                </div>
               )}
             </div>
 
@@ -876,15 +921,15 @@ export default function PublicForm() {
                 type="submit" 
                 disabled={!isFormValid || verificationLoading}
                 aria-disabled={!isFormValid || verificationLoading ? 'true' : 'false'}
-                className={`w-full py-4 px-6 rounded-2xl font-bold tracking-wide transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                className={`w-full py-3.5 px-6 rounded-lg font-bold tracking-wide transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
                   isFormValid 
-                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:from-indigo-700 hover:to-indigo-800 shadow-lg shadow-indigo-200/55 transform active:scale-[0.98]' 
-                    : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                    ? 'bg-[#e31c3d] text-white hover:bg-[#c91430] active:scale-[0.98] shadow-md shadow-red-200/50' 
+                    : 'bg-slate-200 border border-slate-300 text-slate-400 cursor-not-allowed shadow-none'
                 }`}
               >
                 {verificationLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
                     <span>Processing Secure Request...</span>
                   </>
                 ) : (
@@ -900,25 +945,25 @@ export default function PublicForm() {
           // STEP 2: Challenging 6-Digit Verification PIN Input
           <form onSubmit={handleVerifyOtpAndSubmit} className="space-y-6">
             <div className="text-center">
-              <div className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-bounce">
-                <KeyRound className="w-7 h-7 text-indigo-600" />
+              <div className="w-14 h-14 bg-[#fce8eb] border border-[#fbd4d9] rounded-2xl flex items-center justify-center mx-auto mb-4 animate-bounce">
+                <KeyRound className="w-7 h-7 text-[#e31c3d]" />
               </div>
               <h1 className="text-xl font-display font-black text-slate-900 tracking-tight">Verify Your Phone</h1>
               <p className="text-xs text-slate-500 mt-2">
                 We sent a secure 6-digit OTP code to the verified number:
               </p>
-              <p className="text-sm font-extrabold text-slate-850 mt-1">{formData.phone}</p>
+              <p className="text-sm font-extrabold text-slate-800 mt-1">{formData.phone}</p>
             </div>
 
             {validationError && (
-              <div role="alert" className="p-3.5 bg-red-55/10 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
+              <div role="alert" className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
                 <span>{validationError}</span>
               </div>
             )}
 
             <div>
-              <label htmlFor="otpCode" className="block text-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+              <label htmlFor="otpCode" className="block text-center text-xs font-semibold text-slate-600 uppercase tracking-widest mb-3">
                 Enter Verification Code Pin
               </label>
               <input 
@@ -930,17 +975,17 @@ export default function PublicForm() {
                 onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                 placeholder="------"
                 aria-label="6-Digit Verification Code"
-                className="w-full text-center tracking-[12px] font-mono text-2xl font-black border border-slate-200 rounded-2xl py-3.5 bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 text-slate-900 focus:outline-none transition-all"
+                className="w-full text-center tracking-[12px] font-mono text-2xl font-black border border-slate-200 rounded-lg py-3.5 bg-white focus:ring-4 focus:ring-[#e31c3d]/15 focus:border-[#e31c3d] text-slate-900 focus:outline-none transition-all"
               />
             </div>
 
             {/* Active Sandbox bypass widget to helper users testing the form inside their applet */}
             {demoCode && (
-              <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-2xl text-center shadow-inner animate-pulse">
-                <span className="text-[11px] font-bold text-indigo-800 flex items-center justify-center gap-1.5 leading-none">
+              <div className="p-3.5 bg-[#fce8eb]/60 border border-[#fbd4d9] rounded-xl text-center shadow-inner animate-pulse">
+                <span className="text-[11px] font-bold text-[#e31c3d] flex items-center justify-center gap-1.5 leading-none">
                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
                   CRM Sandbox Bypass Code:
-                  <strong className="text-xs bg-white text-indigo-700 px-2 py-0.5 rounded-lg font-mono border border-indigo-200/80 shadow-sm">{demoCode}</strong>
+                  <strong className="text-xs bg-white text-[#e31c3d] px-2 py-0.5 rounded-lg font-mono border border-red-200 shadow-sm">{demoCode}</strong>
                 </span>
               </div>
             )}
@@ -949,7 +994,7 @@ export default function PublicForm() {
               <button 
                 type="submit" 
                 disabled={verificationLoading || otpCode.length < 6}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-4 rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
+                className="w-full bg-[#e31c3d] hover:bg-[#c91430] disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-lg transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
               >
                 {verificationLoading ? (
                   <>
@@ -969,7 +1014,7 @@ export default function PublicForm() {
                     setOtpCode('');
                     setValidationError('');
                   }}
-                  className="text-slate-500 hover:text-indigo-600 font-semibold transition-colors"
+                  className="text-slate-500 hover:text-[#e31c3d] font-semibold transition-colors"
                 >
                   ← Edit Phone
                 </button>
@@ -982,7 +1027,7 @@ export default function PublicForm() {
                   <button
                     type="button"
                     onClick={handleSendOtp}
-                    className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 transition-colors"
+                    className="text-[#e31c3d] hover:text-[#c91430] font-bold flex items-center gap-1 transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     Resend Code

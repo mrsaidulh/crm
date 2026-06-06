@@ -5,12 +5,25 @@ import { motion, AnimatePresence } from 'motion/react';
 import { logAuditEvent } from '../utils/auditLogger';
 import type { Lead, LeadStatus } from '../types';
 
-const STATUSES: LeadStatus[] = ['New Lead', 'Contact', 'Consultation Booked', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Discarded'];
+const STATUSES: LeadStatus[] = ['New Lead', 'Contact', 'Consultation Booked', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Follow-up Required', 'Discarded'];
+
+const STATUS_LABELS: Record<LeadStatus, string> = {
+  'New Lead': 'New Lead',
+  'Contact': 'Contact',
+  'Follow-up Required': 'Follow-up Required',
+  'Consultation Booked': 'Consultation Booked',
+  'Counseling Done': 'Counseling Done',
+  'Demo Class Booked': 'Demo Class Booked',
+  'Payment Pending': 'Payment Pending',
+  'Re-engagement Offer': 'Re-engagement Offer',
+  'Enrolled': 'Enrolled',
+  'Discarded': 'Discarded'
+};
 
 const STATUS_COLORS: Record<LeadStatus, { bg: string; text: string; border: string; accent: string; dot: string; glow: string }> = {
   'New Lead': { bg: 'bg-indigo-50/80', text: 'text-indigo-700', border: 'border-indigo-100', accent: 'bg-indigo-600', dot: 'bg-indigo-500', glow: 'shadow-indigo-100/50' },
   'Contact': { bg: 'bg-blue-50/80', text: 'text-blue-700', border: 'border-blue-100', accent: 'bg-blue-600', dot: 'bg-blue-500', glow: 'shadow-blue-100/50' },
-  'Follow-up': { bg: 'bg-amber-50/80', text: 'text-amber-700', border: 'border-amber-100', accent: 'bg-amber-600', dot: 'bg-amber-500', glow: 'shadow-amber-100/50' },
+  'Follow-up Required': { bg: 'bg-amber-50/80', text: 'text-amber-700', border: 'border-amber-100', accent: 'bg-amber-600', dot: 'bg-amber-500', glow: 'shadow-amber-100/50' },
   'Consultation Booked': { bg: 'bg-orange-50/80', text: 'text-orange-700', border: 'border-orange-100', accent: 'bg-orange-600', dot: 'bg-orange-500', glow: 'shadow-orange-100/50' },
   'Counseling Done': { bg: 'bg-cyan-50/80', text: 'text-cyan-700', border: 'border-cyan-100', accent: 'bg-cyan-600', dot: 'bg-cyan-500', glow: 'shadow-cyan-100/50' },
   'Demo Class Booked': { bg: 'bg-purple-50/80', text: 'text-purple-700', border: 'border-purple-100', accent: 'bg-purple-600', dot: 'bg-purple-500', glow: 'shadow-purple-100/50' },
@@ -138,7 +151,7 @@ export default function FunnelView() {
                 <div className="p-4 pl-6 md:pl-4 border-b border-slate-200/60 flex items-center justify-between bg-slate-50/40 rounded-t-2xl shrink-0">
                   <div className="flex items-center gap-2">
                     <span className={`w-2.5 h-2.5 rounded-full ${colors.dot} ${isTargetColumn ? 'animate-ping' : ''}`} />
-                    <h3 className="font-semibold text-slate-800 text-xs uppercase tracking-wider">{status}</h3>
+                    <h3 className="font-semibold text-slate-800 text-xs uppercase tracking-wider">{STATUS_LABELS[status] || status}</h3>
                   </div>
                   <span className={`${colors.bg} ${colors.text} text-[10px] font-bold px-2 py-0.5 rounded-full border ${colors.border}`}>
                     {columnLeads.length}
@@ -229,7 +242,7 @@ export default function FunnelView() {
                                   className="text-[9px] font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80 rounded py-0.5 px-1.5 cursor-pointer transition-colors focus:ring-0 focus:outline-none"
                                   title="Transfer Stage"
                                 >
-                                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                  {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
                                 </select>
                               </div>
                             </div>

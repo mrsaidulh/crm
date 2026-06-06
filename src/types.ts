@@ -1,5 +1,5 @@
 export type LeadSource = 'Facebook Ads' | 'Google Ads' | 'Youtube Ads' | 'Website Form' | 'Direct' | 'Referral' | 'Others' | (string & {});
-export type LeadStatus = 'New Lead' | 'Contact' | 'Follow-up' | 'Consultation Booked' | 'Counseling Done' | 'Demo Class Booked' | 'Payment Pending' | 'Re-engagement Offer' | 'Enrolled' | 'Discarded';
+export type LeadStatus = 'New Lead' | 'Contact' | 'Follow-up Required' | 'Consultation Booked' | 'Counseling Done' | 'Demo Class Booked' | 'Payment Pending' | 'Re-engagement Offer' | 'Enrolled' | 'Discarded';
 
 export interface MockScore {
   date: number;

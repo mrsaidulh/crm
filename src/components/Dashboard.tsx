@@ -304,7 +304,7 @@ export default function Dashboard() {
     const statuses: LeadStatus[] = [
       'New Lead',
       'Contact',
-      'Follow-up',
+      'Follow-up Required',
       'Consultation Booked',
       'Counseling Done',
       'Demo Class Booked',

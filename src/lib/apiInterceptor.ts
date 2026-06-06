@@ -69,9 +69,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
                externalUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(settings.smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(settings.smsSenderId || '8801844532633')}&message=${encodeURIComponent(smsMessage)}`;
             } else if (settings.smsProvider === 'sms_bd') {
                externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+            } else if (settings.smsProvider === 'greenweb') {
+               externalUrl = `http://api.greenweb.com.bd/api.php?token=${encodeURIComponent(settings.smsApiKey)}&to=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
             } else {
-               // Support sms.bd or custom Greenweb URL format dynamically if configured
-               externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+               // Custom URL format with interpolation support
+               if (settings.smsApiUrl) {
+                 externalUrl = settings.smsApiUrl
+                   .replace(/\{\{api_key\}\}/gi, encodeURIComponent(settings.smsApiKey))
+                   .replace(/\{\{phone\}\}/gi, encodeURIComponent(cleanedPhone))
+                   .replace(/\{\{message\}\}/gi, encodeURIComponent(smsMessage))
+                   .replace(/\{\{sender_id\}\}/gi, encodeURIComponent(settings.smsSenderId || ''));
+               } else {
+                 externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+               }
             }
 
             // Attempt to hit the actual API through CORS (Client-side)

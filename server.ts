@@ -36,6 +36,7 @@ function getMetaEventFromStatus(status: string, mapping: Record<string, string> 
     case 'Contact':
     case 'Contacted':
     case 'Follow-up':
+    case 'Follow-up Required':
       return 'Contact';
     case 'Consultation Booked':
       return 'Schedule';
@@ -67,6 +68,7 @@ function getGoogleEventFromStatus(status: string, mapping: Record<string, string
     case 'Contact':
     case 'Contacted':
     case 'Follow-up':
+    case 'Follow-up Required':
       return 'contact';
     case 'Consultation Booked':
       return 'schedule';

@@ -67,7 +67,7 @@ export default function CustomerProfileModal({ customer, onClose }: Props) {
           } else if (currentStatus === 'Enrolled') {
             setSelectedMetaEvent('Purchase');
             setSelectedGoogleEvent('purchase');
-          } else if (currentStatus === 'Contact' || currentStatus === 'Contacted' || currentStatus === 'Follow-up') {
+          } else if (currentStatus === 'Contact' || currentStatus === 'Contacted' || currentStatus === 'Follow-up' || currentStatus === 'Follow-up Required') {
             setSelectedMetaEvent('Contact');
             setSelectedGoogleEvent('contact');
           } else {

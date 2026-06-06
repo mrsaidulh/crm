@@ -158,7 +158,7 @@ export default function WorkflowsView() {
     }
   };
 
-  const statusOptions: LeadStatus[] = ['New Lead', 'Contact', 'Follow-up', 'Consultation Booked', 'Counseling Done', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Discarded'];
+  const statusOptions: LeadStatus[] = ['New Lead', 'Contact', 'Follow-up Required', 'Consultation Booked', 'Counseling Done', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Discarded'];
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading workflows...</div>;
 
@@ -412,6 +412,18 @@ export default function WorkflowsView() {
                   )}
                 </div>
               </div>
+
+              {formData.triggerEvent === 'Lead Created' && (formData.actionType === 'Send Email' || formData.actionType === 'Send SMS') && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs space-y-1">
+                  <p className="font-bold flex items-center gap-1">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
+                    Immediate Auto-Responder Active
+                  </p>
+                  <p className="text-slate-600 leading-normal">
+                    This template will be personalized and sent immediately to the new lead's registered {formData.actionType === 'Send SMS' ? 'phone number' : 'email address'} as soon as they are captured via the consultation form.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-medium py-2.5 rounded-xl border border-slate-200 transition-colors">

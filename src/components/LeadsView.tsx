@@ -15,6 +15,7 @@ export default function LeadsView() {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [sourceFilter, setSourceFilter] = useState<string>('All');
   const [countryFilter, setCountryFilter] = useState<string>('All');
+  const [tagFilter, setTagFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('createdAt-desc');
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -33,6 +34,7 @@ export default function LeadsView() {
   const [showBulkTagRemove, setShowBulkTagRemove] = useState(false);
 
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+  const [formCustomCountry, setFormCustomCountry] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [detectedCallingCode, setDetectedCallingCode] = useState('');
   const [formData, setFormData] = useState({ 
@@ -123,7 +125,7 @@ export default function LeadsView() {
       }
       case 'targetCourse': {
         if (!value || value === "") {
-          return "Please select a target course";
+          return "Please select a course";
         }
         return "";
       }
@@ -142,8 +144,8 @@ export default function LeadsView() {
         return "";
       }
       case 'destination': {
-        if (!value || value === "") {
-          return "Please select a target country";
+        if (!value || value === "" || value === 'Others' || value === 'Other') {
+          return "Please specify student's target country";
         }
         return "";
       }
@@ -397,6 +399,29 @@ export default function LeadsView() {
       .sort((a, b) => b.count - a.count);
   }, [leads]);
 
+  // Dynamic calculation of unique destinations and their counts for the country filter
+  const uniqueCountries = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    leads.forEach(l => {
+      const dest = l.destination?.trim();
+      if (dest) {
+        counts[dest] = (counts[dest] || 0) + 1;
+      }
+    });
+
+    // Make sure common core options are defined so they always exist even with 0 counts
+    const defaults = ['United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'];
+    defaults.forEach(c => {
+      if (counts[c] === undefined) {
+        counts[c] = 0;
+      }
+    });
+
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [leads]);
+
   const handleRenameTag = async (oldName: string, newName: string) => {
     const trimmedNew = newName.trim();
     if (!trimmedNew || trimmedNew === oldName) return;
@@ -591,6 +616,7 @@ export default function LeadsView() {
 
   const openAddModal = () => {
     setEditingLeadId(null);
+    setFormCustomCountry('');
     setFormData({ 
       name: '', 
       email: '', 
@@ -624,6 +650,13 @@ export default function LeadsView() {
 
   const openEditModal = (lead: Lead) => {
     setEditingLeadId(lead.id);
+    const dest = lead.destination || 'United Kingdom';
+    const coreList = ['United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'];
+    if (dest && !coreList.includes(dest)) {
+      setFormCustomCountry(dest);
+    } else {
+      setFormCustomCountry('');
+    }
     setFormData({ 
       name: lead.name, 
       email: lead.email, 
@@ -633,7 +666,7 @@ export default function LeadsView() {
       expectedValue: lead.expectedValue || '', 
       targetCourse: lead.targetCourse || 'IELTS Academic', 
       targetBand: lead.targetBand || '', 
-      destination: lead.destination || 'United Kingdom',
+      destination: dest,
       tags: lead.tags ? lead.tags.join(', ') : ''
     });
     setTouched({
@@ -880,6 +913,7 @@ export default function LeadsView() {
     const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'All' || lead.source === sourceFilter;
     const matchesCountry = countryFilter === 'All' || lead.destination === countryFilter;
+    const matchesTag = tagFilter === 'All' || (lead.tags && lead.tags.includes(tagFilter));
     
     if (showDuplicatesOnly) {
       const email = lead.email?.trim().toLowerCase();
@@ -891,7 +925,7 @@ export default function LeadsView() {
       }
     }
     
-    return matchesSearch && matchesStatus && matchesSource && matchesCountry;
+    return matchesSearch && matchesStatus && matchesSource && matchesCountry && matchesTag;
   });
 
   const sortedLeads = [...filteredLeads].sort((a, b) => {
@@ -913,7 +947,7 @@ export default function LeadsView() {
   const statusColors: Record<LeadStatus, string> = {
     'New Lead': 'bg-blue-100 text-blue-700',
     'Contact': 'bg-amber-100 text-amber-700',
-    'Follow-up': 'bg-purple-100 text-purple-700',
+    'Follow-up Required': 'bg-purple-100 text-purple-700',
     'Consultation Booked': 'bg-indigo-100 text-indigo-700',
     'Counseling Done': 'bg-teal-100 text-teal-700',
     'Demo Class Booked': 'bg-pink-100 text-pink-700',
@@ -981,7 +1015,7 @@ export default function LeadsView() {
                 <option value="All">All Statuses</option>
                 <option value="New Lead">New Lead</option>
                 <option value="Contact">Contact</option>
-                <option value="Follow-up">Follow-up</option>
+                <option value="Follow-up Required">Follow-up Required</option>
                 <option value="Consultation Booked">Consultation Booked</option>
                 <option value="Counseling Done">Counseling Done</option>
                 <option value="Demo Class Booked">Demo Class Booked</option>
@@ -1020,14 +1054,27 @@ export default function LeadsView() {
               <select 
                 value={countryFilter}
                 onChange={(e) => setCountryFilter(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate"
               >
                 <option value="All">All Countries</option>
-                <option value="Australia">Australia</option>
-                <option value="United Kingdom">United Kingdom</option>
-                <option value="USA">USA</option>
-                <option value="Canada">Canada</option>
-                <option value="Others">Others</option>
+                {uniqueCountries.map(({ name, count }) => (
+                  <option key={name} value={name}>{name} ({count})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tag / Category Filter */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+              <Tag className="w-4 h-4 text-indigo-500" />
+              <select 
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate"
+              >
+                <option value="All">All Tags</option>
+                {distinctTagsWithCounts.map(({ name, count }) => (
+                  <option key={name} value={name}>{name} ({count})</option>
+                ))}
               </select>
             </div>
 
@@ -1087,7 +1134,7 @@ export default function LeadsView() {
                   <option value="" disabled>Select Status...</option>
                   <option value="New Lead">New Lead</option>
                   <option value="Contact">Contact</option>
-                  <option value="Follow-up">Follow-up</option>
+                  <option value="Follow-up Required">Follow-up Required</option>
                   <option value="Consultation Booked">Consultation Booked</option>
                   <option value="Counseling Done">Counseling Done</option>
                   <option value="Demo Class Booked">Demo Class Booked</option>
@@ -1309,7 +1356,7 @@ export default function LeadsView() {
                         >
                           <option value="New Lead">New Lead</option>
                           <option value="Contact">Contact</option>
-                          <option value="Follow-up">Follow-up</option>
+                          <option value="Follow-up Required">Follow-up Required</option>
                           <option value="Consultation Booked">Consultation Booked</option>
                           <option value="Counseling Done">Counseling Done</option>
                           <option value="Demo Class Booked">Demo Class Booked</option>
@@ -1485,9 +1532,9 @@ export default function LeadsView() {
                     onBlur={() => handleBlurField('targetCourse')}
                     className={getFieldStyles('targetCourse')}
                   >
-                    <option value="">Select target course</option>
+                    <option value="">Select Course</option>
                     <option value="IELTS Academic">IELTS Academic</option>
-                    <option value="IELTS General Training">IELTS General Training</option>
+                    <option value="IELTS GT">IELTS GT</option>
                     <option value="IELTS UKVI">IELTS UKVI</option>
                     <option value="IELTS Life Skills">IELTS Life Skills</option>
                   </select>
@@ -1522,8 +1569,17 @@ export default function LeadsView() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Target Country</label>
                   <select
-                    value={formData.destination}
-                    onChange={(e) => handleInputChange('destination', e.target.value)}
+                    value={formData.destination === 'Other' || formData.destination === 'Others' || (!['', 'United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'].includes(formData.destination)) ? 'Others' : formData.destination}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'Others') {
+                        handleInputChange('destination', 'Others');
+                        setFormCustomCountry('');
+                      } else {
+                        handleInputChange('destination', val);
+                        setFormCustomCountry('');
+                      }
+                    }}
                     onBlur={() => handleBlurField('destination')}
                     className={getFieldStyles('destination')}
                   >
@@ -1535,12 +1591,33 @@ export default function LeadsView() {
                     <option value="New Zealand">New Zealand</option>
                     <option value="Germany">Germany</option>
                     <option value="Ireland">Ireland</option>
-                    <option value="Other">Other</option>
+                    <option value="Others">Others</option>
                   </select>
                   {touched.destination && errors.destination && (
                     <span role="alert" className="text-[11px] text-red-500 font-medium flex items-center gap-1 mt-1">
                       ⚠️ {errors.destination}
                     </span>
+                  )}
+
+                  {/* If others is selected, specify the exact country */}
+                  {(formData.destination === 'Others' || formData.destination === 'Other' || (!['', 'United Kingdom', 'USA', 'Canada', 'Australia', 'New Zealand', 'Germany', 'Ireland'].includes(formData.destination) && formData.destination !== '')) && (
+                    <div className="mt-2 text-left relative animate-in fade-in duration-200">
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1 pl-0.5">
+                        Please specify country <span className="text-[#e31c3d]">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Japan, Sweden, Malaysia"
+                        value={formCustomCountry || (formData.destination !== 'Others' && formData.destination !== 'Other' ? formData.destination : '')}
+                        onChange={(e) => {
+                          const userVal = e.target.value;
+                          setFormCustomCountry(userVal);
+                          setFormData(prev => ({ ...prev, destination: userVal }));
+                        }}
+                        onBlur={() => handleBlurField('destination')}
+                        className={getFieldStyles('destination')}
+                      />
+                    </div>
                   )}
                 </div>
                 <div>
@@ -1667,7 +1744,8 @@ export default function LeadsView() {
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => {
-                                  setSearch(name);
+                                  setTagFilter(name);
+                                  setSearch('');
                                   setIsTagManagerOpen(false);
                                 }}
                                 className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 rounded-lg transition-colors"

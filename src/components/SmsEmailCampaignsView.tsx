@@ -51,7 +51,7 @@ export default function SmsEmailCampaignsView() {
       if (audience === 'All Contacts') return true;
       if (audience === 'New Leads') return status === 'New Lead' || status === 'New';
       if (audience === 'Contacted Leads') return status === 'Contact' || status === 'Contacted';
-      if (audience === 'Follow-up Required') return status === 'Follow-up';
+      if (audience === 'Follow-up Required') return status === 'Follow-up Required' || status === 'Follow-up';
       if (audience === 'Consultation Booked') return status === 'Consultation Booked';
       if (audience === 'Demo Class Booked') return status === 'Demo Class Booked' || status === 'Demo Class';
       if (audience === 'Payment Pending') return status === 'Payment Pending';
