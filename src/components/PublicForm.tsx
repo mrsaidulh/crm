@@ -90,6 +90,15 @@ export default function PublicForm() {
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [hiddenTags, setHiddenTags] = useState<string[]>([]);
+  
+  // UTM Parameters Tracking State
+  const [utmParams, setUtmParams] = useState({
+    utm_source: '',
+    utm_medium: '',
+    utm_campaign: '',
+    utm_term: '',
+    utm_content: ''
+  });
 
   // Parse userId and dynamic tracking info from URL paths or query params 
   // Supports formats like /form/facebook/ieltswriting/webinar or ?source=facebook&course=IELTS Writing
@@ -102,6 +111,21 @@ export default function PublicForm() {
     let urlCourse = params.get('targetCourse') || params.get('course') || params.get('utm_campaign');
     let urlDestination = params.get('destination') || params.get('country');
     let urlTagsParam = params.get('tags') || params.get('utm_medium') || params.get('campaign');
+
+    // Capture precise standard UTM campaign parameter values for hidden fields and CRM logs
+    const utm_source = params.get('utm_source') || '';
+    const utm_medium = params.get('utm_medium') || '';
+    const utm_campaign = params.get('utm_campaign') || '';
+    const utm_term = params.get('utm_term') || '';
+    const utm_content = params.get('utm_content') || '';
+
+    setUtmParams({
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_term,
+      utm_content
+    });
 
     if (pathParts.length > 1 && pathParts[0] === 'form') {
       if (!urlSource && pathParts.length > 1 && !pathParts[1].startsWith('uid')) {
@@ -508,12 +532,33 @@ export default function PublicForm() {
       setStatus('submitting');
       
       const cleanData = getSanitizedData();
+
+      // Bundle standard UTM campaign parameter tags automatically for easy CRM search/filtering
+      const finalTags = [...hiddenTags];
+      if (utmParams.utm_source) finalTags.push(`utm_source:${utmParams.utm_source}`);
+      if (utmParams.utm_medium) finalTags.push(`utm_medium:${utmParams.utm_medium}`);
+      if (utmParams.utm_campaign) finalTags.push(`utm_campaign:${utmParams.utm_campaign}`);
+      if (utmParams.utm_term) finalTags.push(`utm_term:${utmParams.utm_term}`);
+      if (utmParams.utm_content) finalTags.push(`utm_content:${utmParams.utm_content}`);
+
+      const utmLines = [];
+      if (utmParams.utm_source) utmLines.push(`• Source: ${utmParams.utm_source}`);
+      if (utmParams.utm_medium) utmLines.push(`• Medium: ${utmParams.utm_medium}`);
+      if (utmParams.utm_campaign) utmLines.push(`• Campaign: ${utmParams.utm_campaign}`);
+      if (utmParams.utm_term) utmLines.push(`• Term: ${utmParams.utm_term}`);
+      if (utmParams.utm_content) utmLines.push(`• Content: ${utmParams.utm_content}`);
+
+      const utmNotes = utmLines.length > 0
+        ? `[UTM Ad Tracking Summary]\n${utmLines.join('\n')}`
+        : undefined;
+
       const leadData = {
         ...cleanData,
         status: 'New' as LeadStatus,
         userId: userId,
         phoneVerified: true,
-        tags: hiddenTags.length > 0 ? hiddenTags : undefined
+        tags: finalTags.length > 0 ? finalTags : undefined,
+        notes: utmNotes
       };
 
       const resp = await fetch('/api/leads', {
@@ -581,13 +626,53 @@ export default function PublicForm() {
 
   if (status === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-tr from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 max-w-md w-full text-center animate-in zoom-in-95 duration-300">
-          <div className="w-20 h-20 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+      <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col items-center justify-start pb-12">
+        {/* Top Banner Theme in Deep Violet `#23085a` without breadcrumbs */}
+        <div className="w-full bg-[#23085a] py-14 px-4 text-center text-white shadow-inner mb-8">
+          <h1 className="text-3xl font-display font-bold tracking-tight">Thank You!</h1>
+        </div>
+
+        <div className="bg-white p-6 sm:p-8 border border-neutral-200/80 shadow-md rounded-2xl w-full max-w-sm sm:max-w-md mx-4 text-center animate-in zoom-in-95 duration-300">
+          <div className="w-16 h-16 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 mb-2">Registration Complete!</h2>
-          <p className="text-slate-500 text-sm leading-relaxed mb-6">Your IELTS Free Consultation request was logged successfully. An advisor will reach out to you within the next 24 business hours.</p>
+
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight mb-2">Registration Complete!</h2>
+          <p className="text-slate-600 text-sm leading-relaxed mb-6">
+            Thank you, <span className="font-bold text-slate-900">{formData.name}</span>! Your IELTS Free Consultation request has been successfully stored. An expert advisor will reach out to you within the next 24 business hours.
+          </p>
+
+          {/* Submitted Information Card */}
+          <div className="bg-slate-50 border border-slate-105 rounded-xl p-4 mb-6 text-left text-xs space-y-2.5">
+            <h3 className="font-bold text-slate-700 uppercase tracking-wider text-[10px] pb-1 border-b border-slate-200">
+              Submitted Consultation Details
+            </h3>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Full Name:</span>
+              <span className="text-slate-800 font-semibold">{formData.name}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Email Address:</span>
+              <span className="text-slate-800 font-semibold">{formData.email}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Phone Number:</span>
+              <span className="text-slate-800 font-semibold">{formData.phone}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Target Course:</span>
+              <span className="text-slate-800 font-semibold">{formData.targetCourse}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Target Band:</span>
+              <span className="text-slate-800 font-semibold">{formData.targetBand}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="text-slate-500 font-medium">Target Country:</span>
+              <span className="text-slate-800 font-semibold">{formData.destination}</span>
+            </div>
+          </div>
+
           <button 
             type="button" 
             onClick={() => {
@@ -612,7 +697,7 @@ export default function PublicForm() {
               setOtpCode('');
               setStatus('idle');
             }}
-            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-semibold py-3 px-4 rounded-xl transition-colors cursor-pointer"
+            className="w-full bg-[#23085a] hover:bg-[#34117f] text-white text-sm font-semibold py-3 px-4 rounded-xl transition-colors cursor-pointer"
           >
             Submit Another Request
           </button>
@@ -647,6 +732,13 @@ export default function PublicForm() {
             
             {/* CSRF Token (Placeholder protection against Cross-Site Request Forgery) */}
             <input type="hidden" name="_csrf" value="csrf-token-placeholder-xyz123" />
+
+            {/* UTM Tracking Hidden Fields for Analytics and Ad Networks */}
+            <input type="hidden" name="utm_source" value={utmParams.utm_source} />
+            <input type="hidden" name="utm_medium" value={utmParams.utm_medium} />
+            <input type="hidden" name="utm_campaign" value={utmParams.utm_campaign} />
+            <input type="hidden" name="utm_term" value={utmParams.utm_term} />
+            <input type="hidden" name="utm_content" value={utmParams.utm_content} />
 
             <div className="border-b border-slate-200 pb-3.5 mb-4">
               <h2 className="font-bold text-slate-800 tracking-tight flex flex-col gap-0.5">
@@ -944,6 +1036,13 @@ export default function PublicForm() {
         ) : (
           // STEP 2: Challenging 6-Digit Verification PIN Input
           <form onSubmit={handleVerifyOtpAndSubmit} className="space-y-6">
+            {/* UTM Tracking Hidden Fields for Analytics and Ad Networks */}
+            <input type="hidden" name="utm_source" value={utmParams.utm_source} />
+            <input type="hidden" name="utm_medium" value={utmParams.utm_medium} />
+            <input type="hidden" name="utm_campaign" value={utmParams.utm_campaign} />
+            <input type="hidden" name="utm_term" value={utmParams.utm_term} />
+            <input type="hidden" name="utm_content" value={utmParams.utm_content} />
+
             <div className="text-center">
               <div className="w-14 h-14 bg-[#fce8eb] border border-[#fbd4d9] rounded-2xl flex items-center justify-center mx-auto mb-4 animate-bounce">
                 <KeyRound className="w-7 h-7 text-[#e31c3d]" />

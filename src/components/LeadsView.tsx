@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2, AlertTriangle, Upload } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, LeadStatus, LeadSource } from '../types';
 import { calculateLeadScore } from '../utils/scoring';
@@ -32,6 +32,240 @@ export default function LeadsView() {
   const [bulkTagToRemove, setBulkTagToRemove] = useState('');
   const [showBulkTagAdd, setShowBulkTagAdd] = useState(false);
   const [showBulkTagRemove, setShowBulkTagRemove] = useState(false);
+
+  // Bulk Lead Import States
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkInputText, setBulkInputText] = useState('');
+  const [bulkImportProgress, setBulkImportProgress] = useState<{
+    current: number;
+    total: number;
+    active: boolean;
+    results: string[];
+  }>({
+    current: 0,
+    total: 0,
+    active: false,
+    results: []
+  });
+
+  const downloadTemplateCSV = () => {
+    const templateContent = "Name,Email,Phone,Source,Target Course,Target Band,Destination,Expected Value,Notes\n" +
+      "John Doe,john@example.com,01712345678,Facebook Ads,IELTS Academic,7.5,Australia,15000,Interested in quick study visa info\n" +
+      "Jane Smith,jane@example.com,01812345678,Google Ads,IELTS General,6.5,Canada,12000,Needs weekday batches";
+    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "student_leads_bulk_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        setBulkInputText(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const parseLeadsFromText = (text: string): any[] => {
+    if (!text.trim()) return [];
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length === 0) return [];
+    
+    // Determine delimiter
+    let delimiter = ',';
+    if (lines[0].includes('\t')) delimiter = '\t';
+    else if (lines[0].includes(';')) delimiter = ';';
+    
+    const splitRow = (rowText: string) => {
+      const result: string[] = [];
+      let currentVal = '';
+      let insideQuote = false;
+      for (let i = 0; i < rowText.length; i++) {
+        const char = rowText[i];
+        if (char === '"') {
+          insideQuote = !insideQuote;
+        } else if (char === delimiter && !insideQuote) {
+          result.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      result.push(currentVal.trim());
+      return result.map(v => v.replace(/^"|"$/g, ''));
+    };
+
+    const headerRow = splitRow(lines[0]);
+    const hasHeader = headerRow.some(col => 
+      ['name', 'full name', 'email', 'phone', 'contact', 'source', 'status', 'band', 'target', 'destination', 'country'].includes(col.toLowerCase())
+    );
+
+    let rowsToParse = lines;
+    let colIndices = {
+      name: 0,
+      email: 1,
+      phone: 2,
+      source: -1,
+      targetCourse: -1,
+      targetBand: -1,
+      destination: -1,
+      expectedValue: -1,
+      notes: -1
+    };
+
+    if (hasHeader) {
+      rowsToParse = lines.slice(1);
+      headerRow.forEach((col, idx) => {
+        const low = col.toLowerCase().replace(/[\s_-]/g, '');
+        if (low.includes('name')) colIndices.name = idx;
+        else if (low.includes('email') || low.includes('mail')) colIndices.email = idx;
+        else if (low.includes('phone') || low.includes('number') || low.includes('contact') || low.includes('mobile')) colIndices.phone = idx;
+        else if (low.includes('source')) colIndices.source = idx;
+        else if (low.includes('course') || low.includes('targetcourse')) colIndices.targetCourse = idx;
+        else if (low.includes('band') || low.includes('score') || low.includes('targetband')) colIndices.targetBand = idx;
+        else if (low.includes('destination') || low.includes('country') || low.includes('targetcountry')) colIndices.destination = idx;
+        else if (low.includes('expected') || low.includes('value')) colIndices.expectedValue = idx;
+        else if (low.includes('note') || low.includes('comment')) colIndices.notes = idx;
+      });
+    }
+
+    return rowsToParse.map((rowText) => {
+      const cols = splitRow(rowText);
+      if (cols.length === 0 || (cols.length === 1 && !cols[0])) return null;
+
+      const getVal = (index: number, fallback: string = '') => {
+        if (index >= 0 && index < cols.length) {
+          return cols[index] || fallback;
+        }
+        return fallback;
+      };
+
+      const name = hasHeader ? getVal(colIndices.name) : getVal(0);
+      const email = hasHeader ? getVal(colIndices.email) : getVal(1);
+      const phone = hasHeader ? getVal(colIndices.phone) : getVal(2);
+      const source = hasHeader ? getVal(colIndices.source) : getVal(3, 'Direct');
+      const targetCourse = hasHeader ? getVal(colIndices.targetCourse) : getVal(4, 'IELTS Academic');
+      const targetBand = hasHeader ? getVal(colIndices.targetBand) : getVal(5, '7.0');
+      const destination = hasHeader ? getVal(colIndices.destination) : getVal(6, 'United Kingdom');
+      const expectedValue = hasHeader ? getVal(colIndices.expectedValue) : getVal(7, '');
+      const notes = hasHeader ? getVal(colIndices.notes) : getVal(8, 'Imported in bulk');
+
+      return {
+        name,
+        email,
+        phone,
+        source: source || 'Direct',
+        targetCourse: targetCourse || 'IELTS Academic',
+        targetBand: targetBand || '7.0',
+        destination: destination || 'United Kingdom',
+        expectedValue: expectedValue || '',
+        notes: notes || 'Imported in bulk'
+      };
+    }).filter(Boolean);
+  };
+
+  const handleBulkImport = async (parsedLeads: any[]) => {
+    if (parsedLeads.length === 0) {
+      alert('No valid leads parsed. Clear inputs and try again.');
+      return;
+    }
+
+    setBulkImportProgress({
+      current: 0,
+      total: parsedLeads.length,
+      active: true,
+      results: []
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+    const newImportedLeads: Lead[] = [];
+
+    for (let i = 0; i < parsedLeads.length; i++) {
+      const raw = parsedLeads[i];
+      const payload = {
+        name: raw.name?.trim() || 'Imported Lead',
+        email: raw.email?.trim() || `imported_${Date.now()}_${i}@example.com`,
+        phone: raw.phone?.trim() || `8801700000${String(i).padStart(2, '0')}`,
+        source: raw.source?.trim() || 'Direct',
+        status: 'New Lead' as LeadStatus,
+        expectedValue: raw.expectedValue || '',
+        targetCourse: raw.targetCourse || 'IELTS Academic',
+        targetBand: raw.targetBand || '7.0',
+        destination: raw.destination || 'United Kingdom',
+        tags: ['bulk-imported'],
+        notes: raw.notes || 'Imported via Bulk Upload'
+      };
+
+      try {
+        const response = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...payload,
+            userId: userId
+          })
+        });
+
+        if (response.ok) {
+          const resData = await response.json();
+          const createdLead = resData.lead;
+          const finalizedLead = await evaluateKeywordsTrigger(userId, createdLead);
+          newImportedLeads.push(finalizedLead);
+
+          triggerGlobalWebhook(userId, 'Lead Created', finalizedLead);
+          triggerWorkflowAutomations(userId, 'Lead Created', 'New Lead', finalizedLead);
+
+          logAuditEvent({
+            action: 'Lead Acquired',
+            entityType: 'lead',
+            entityId: finalizedLead.id,
+            details: `Imported student lead "${finalizedLead.name}" via Bulk Upload.`
+          });
+
+          successCount++;
+          setBulkImportProgress(prev => ({
+            ...prev,
+            current: i + 1,
+            results: [...prev.results, `✅ ${payload.name} (Success)`]
+          }));
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          failCount++;
+          setBulkImportProgress(prev => ({
+            ...prev,
+            current: i + 1,
+            results: [...prev.results, `❌ ${payload.name}: ${errData.error || response.statusText}`]
+          }));
+        }
+      } catch (err: any) {
+        failCount++;
+        setBulkImportProgress(prev => ({
+          ...prev,
+          current: i + 1,
+          results: [...prev.results, `❌ ${payload.name}: ${err.message || 'Network error'}`]
+        }));
+      }
+    }
+
+    if (newImportedLeads.length > 0) {
+      setLeads(prev => [...newImportedLeads, ...prev]);
+    }
+
+    alert(`Bulk Import Completed!\nSuccess: ${successCount}\nFailed: ${failCount}`);
+    setBulkImportProgress(prev => ({ ...prev, active: false }));
+    setIsBulkImportOpen(false);
+    setBulkInputText('');
+  };
 
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [formCustomCountry, setFormCustomCountry] = useState('');
@@ -909,6 +1143,7 @@ export default function LeadsView() {
     const matchesSearch = lead.name.toLowerCase().includes(search.toLowerCase()) || 
                           lead.email.toLowerCase().includes(search.toLowerCase()) ||
                           lead.phone.includes(search) ||
+                          lead.status.toLowerCase().includes(search.toLowerCase()) ||
                           (lead.tags && lead.tags.some(t => t.toLowerCase().includes(search.toLowerCase())));
     const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'All' || lead.source === sourceFilter;
@@ -974,6 +1209,14 @@ export default function LeadsView() {
             Export Leads
           </button>
           <button 
+            onClick={() => setIsBulkImportOpen(true)}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+            title="Import multiple leads via file upload or paste"
+          >
+            <Upload className="w-4 h-4 text-slate-500" />
+            Bulk Import
+          </button>
+          <button 
             onClick={() => setIsTagManagerOpen(true)}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
             title="Open global CRM tag manager"
@@ -991,26 +1234,55 @@ export default function LeadsView() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-slate-50/50">
-          <div className="relative w-full md:w-80">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-350">
+        {/* Quick Filter Tabs for Status */}
+        <div className="px-4 pt-3.5 pb-2.5 border-b border-slate-100 flex flex-wrap gap-2 items-center bg-slate-50/20">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none mr-1.5">Quick Status:</span>
+          {['All', 'New Lead', 'Contact', 'Follow-up Required', 'Consultation Booked', 'Enrolled'].map(st => {
+            const isActive = statusFilter === st;
+            return (
+              <button 
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-250 ${
+                  isActive 
+                    ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-150' 
+                    : 'bg-slate-100/80 hover:bg-slate-200 text-slate-700 hover:text-slate-900 shadow-3xs'
+                }`}
+              >
+                {st === 'All' ? 'All Leads' : st}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row gap-4 justify-between items-stretch xl:items-center bg-slate-50/50">
+          <div className="relative flex-1 min-w-[280px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search leads by name, email, phone or tags..." 
+              placeholder="Search by name, email, status, phone, tag..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              className="w-full pl-9 pr-14 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white shadow-3xs placeholder-slate-400"
             />
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-slate-150 hover:bg-slate-200 text-slate-500 hover:text-slate-700 hover:scale-105 active:scale-95 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all"
+              >
+                Clear
+              </button>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-start xl:justify-end">
             {/* Status Filter */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <Filter className="w-4 h-4 text-slate-400" />
               <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 leading-none select-none"
               >
                 <option value="All">All Statuses</option>
                 <option value="New Lead">New Lead</option>
@@ -1027,12 +1299,12 @@ export default function LeadsView() {
             </div>
 
             {/* Lead Source Filter */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <Tag className="w-4 h-4 text-slate-400" />
               <select 
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 leading-none select-none"
               >
                 <option value="All">All Sources</option>
                 <option value="Facebook Ads">Facebook Ads</option>
@@ -1049,12 +1321,12 @@ export default function LeadsView() {
             </div>
 
             {/* Target Country Filter */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <Globe className="w-4 h-4 text-slate-400" />
               <select 
                 value={countryFilter}
                 onChange={(e) => setCountryFilter(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate leading-none select-none"
               >
                 <option value="All">All Countries</option>
                 {uniqueCountries.map(({ name, count }) => (
@@ -1064,12 +1336,12 @@ export default function LeadsView() {
             </div>
 
             {/* Tag / Category Filter */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <Tag className="w-4 h-4 text-indigo-500" />
               <select 
                 value={tagFilter}
                 onChange={(e) => setTagFilter(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 max-w-[130px] truncate leading-none select-none"
               >
                 <option value="All">All Tags</option>
                 {distinctTagsWithCounts.map(({ name, count }) => (
@@ -1083,8 +1355,8 @@ export default function LeadsView() {
               onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
               className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-bold transition-all duration-200 shadow-xs cursor-pointer ${
                 showDuplicatesOnly 
-                  ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white' 
-                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+                  ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white hover:scale-102 active:scale-98' 
+                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
               }`}
               title="Show only leads that have duplicate email or phone numbers"
             >
@@ -1092,12 +1364,12 @@ export default function LeadsView() {
               {showDuplicatesOnly ? 'Duplicates Only' : 'Find Duplicates'}
             </button>
             
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <ArrowUpDown className="w-4 h-4 text-slate-400" />
               <select 
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700"
+                className="text-xs font-semibold focus:outline-none bg-transparent border-none cursor-pointer p-0 text-slate-700 leading-none select-none"
               >
                 <option value="createdAt-desc">Newest First</option>
                 <option value="createdAt-asc">Oldest First</option>
@@ -1107,6 +1379,64 @@ export default function LeadsView() {
             </div>
           </div>
         </div>
+
+        {/* Active Filters Summary Row */}
+        {(search !== '' || statusFilter !== 'All' || sourceFilter !== 'All' || countryFilter !== 'All' || tagFilter !== 'All' || showDuplicatesOnly) && (
+          <div className="bg-amber-50/30 border-b border-amber-100/50 px-4 py-2 flex flex-wrap gap-2 items-center text-xs text-slate-600 justify-between animate-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center flex-wrap gap-1.5">
+              <span className="font-bold text-slate-400 uppercase text-[9px] tracking-wider select-none mr-1">Active Filters:</span>
+              {search !== '' && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Keyword: <strong className="text-slate-900 font-mono text-[10px]">{search}</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setSearch('')} />
+                </span>
+              )}
+              {statusFilter !== 'All' && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Status: <strong className="text-indigo-950 font-bold">{statusFilter}</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setStatusFilter('All')} />
+                </span>
+              )}
+              {sourceFilter !== 'All' && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Source: <strong className="text-slate-900 font-bold">{sourceFilter}</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setSourceFilter('All')} />
+                </span>
+              )}
+              {countryFilter !== 'All' && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Country: <strong className="text-slate-900 font-bold">{countryFilter}</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setCountryFilter('All')} />
+                </span>
+              )}
+              {tagFilter !== 'All' && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Tag: <strong className="text-slate-900 font-semibold">{tagFilter}</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setTagFilter('All')} />
+                </span>
+              )}
+              {showDuplicatesOnly && (
+                <span className="bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  <strong>Duplicates Only</strong>
+                  <X className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5" onClick={() => setShowDuplicatesOnly(false)} />
+                </span>
+              )}
+            </div>
+            <button 
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('All');
+                setSourceFilter('All');
+                setCountryFilter('All');
+                setTagFilter('All');
+                setShowDuplicatesOnly(false);
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-850 font-bold hover:underline transition-all cursor-pointer underline-offset-2 ml-auto"
+            >
+              Reset All Filters
+            </button>
+          </div>
+        )}
 
         {/* Dynamic Bulk Actions Bar */}
         {selectedLeadIds.length > 0 && (
@@ -1782,6 +2112,176 @@ export default function LeadsView() {
             
             <div className="p-4 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400 text-center flex-shrink-0 font-medium">
               💡 Tip: Click search icon to instantly filter the leads list by that tag category
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Lead Import Modal */}
+      {isBulkImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="absolute inset-0" onClick={() => {
+            if (!bulkImportProgress.active) {
+              setIsBulkImportOpen(false);
+              setBulkInputText('');
+            }
+          }}></div>
+          
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-slate-900 font-display font-medium">Bulk Import Student Leads</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  if (!bulkImportProgress.active) {
+                    setIsBulkImportOpen(false);
+                    setBulkInputText('');
+                  }
+                }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                disabled={bulkImportProgress.active}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              {/* Info Tips & Download Template Banner */}
+              <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">Quick Bulk Template</h4>
+                  <p className="text-xs text-indigo-700 leading-relaxed">
+                    Import Name, Email, Phone, Country & Courses in one click. Download our starter CSV template to begin.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadTemplateCSV}
+                  className="bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Template.csv
+                </button>
+              </div>
+
+              {/* Paste Text / CSV Input */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="block text-sm font-semibold text-slate-700">Paste CSV or Tab-Delimited Leads Data</label>
+                  <label className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer flex items-center gap-1 transition-colors">
+                    <Upload className="w-3 h-3" />
+                    Upload .csv file
+                    <input 
+                      type="file" 
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={bulkImportProgress.active}
+                    />
+                  </label>
+                </div>
+                <textarea
+                  rows={6}
+                  placeholder={`Example row format (First row is headers or positional values like Name,Email,Phone,Source,Course,Band,Destination):\nJohn Doe,john@example.com,01712345678,Facebook Ads,IELTS Academic,7.5,Australia,Interested in fast-track coaching\nJane Doe,jane@example.com,01812345678,Google Ads,IELTS General,6.5,Canada,Wants evening courses`}
+                  value={bulkInputText}
+                  onChange={(e) => setBulkInputText(e.target.value)}
+                  className="w-full text-xs font-mono p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-slate-50 placeholder-slate-400"
+                  disabled={bulkImportProgress.active}
+                />
+              </div>
+
+              {/* Parsed Preview Section */}
+              {bulkInputText.trim().length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider text-slate-500">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 font-bold" />
+                    Parsed Leads Preview ({parseLeadsFromText(bulkInputText).length} rows detected)
+                  </h3>
+                  <div className="border border-slate-100 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-white shadow-xs">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 border-b border-slate-100 font-medium select-none sticky top-0">
+                          <th className="p-2.5 font-bold">Name</th>
+                          <th className="p-2.5 font-bold">Phone</th>
+                          <th className="p-2.5 font-bold">Email</th>
+                          <th className="p-2.5 font-bold">Target Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parseLeadsFromText(bulkInputText).map((lead, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="p-2.5 font-semibold text-slate-800">{lead.name || '—'}</td>
+                            <td className="p-2.5 text-slate-600 font-mono">{lead.phone || '—'}</td>
+                            <td className="p-2.5 text-slate-500 font-mono">{lead.email || '—'}</td>
+                            <td className="p-2.5 text-slate-600">
+                              <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-semibold mr-1 font-mono">
+                                {lead.targetBand ? `${lead.targetBand}` : '7.0'}
+                              </span>
+                              <span className="text-slate-500">{lead.destination || 'UK'}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress Panel */}
+              {bulkImportProgress.active && (
+                <div className="bg-[#23085a] text-white rounded-xl p-5 space-y-3.5 shadow-md animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-indigo-200">Importing Student Records...</span>
+                    <span className="text-xs font-bold text-indigo-300 font-mono">
+                      {bulkImportProgress.current} / {bulkImportProgress.total} Complete
+                    </span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-800/80 rounded-full h-2.5 overflow-hidden">
+                    <div 
+                      className="bg-emerald-400 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkImportProgress.current / bulkImportProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  {/* Latest logs */}
+                  <div className="text-[10px] h-20 overflow-y-auto bg-slate-900/60 rounded-lg p-2.5 font-mono space-y-1 text-slate-300 divide-y divide-slate-800/20">
+                    {bulkImportProgress.results.slice(-4).map((res, i) => (
+                      <div key={i} className="pt-0.5">{res}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBulkImportOpen(false);
+                  setBulkInputText('');
+                }}
+                disabled={bulkImportProgress.active}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50 cursor-pointer animate-in fade-in"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBulkImport(parseLeadsFromText(bulkInputText))}
+                disabled={bulkImportProgress.active || parseLeadsFromText(bulkInputText).length === 0}
+                className={`px-5 py-2 text-sm font-bold text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
+                  bulkImportProgress.active || parseLeadsFromText(bulkInputText).length === 0
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    : 'bg-[#23085a] hover:bg-[#34117f] hover:scale-[1.02] cursor-pointer'
+                }`}
+              >
+                {bulkImportProgress.active ? 'Importing...' : `Import ${parseLeadsFromText(bulkInputText).length} Lead${parseLeadsFromText(bulkInputText).length === 1 ? '' : 's'}`}
+              </button>
             </div>
           </div>
         </div>
