@@ -1,5 +1,9 @@
 import mysql from 'mysql2/promise';
 import { Lead, Campaign, AuditLog, Task, Template, WorkflowRule, UserSettings, TeamMember } from '../types';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import fs from 'fs';
+import path from 'path';
 
 export interface ManualAuthUser {
   uid: string;
@@ -34,6 +38,68 @@ let inMemoryWorkflows: WorkflowRule[] = [];
 let inMemorySettings: Record<string, UserSettings> = {};
 let inMemoryTeamMembers: TeamMember[] = [];
 let inMemoryUsers: ManualAuthUser[] = [];
+
+// Initialize backend Firestore if config exists
+let serverFirestoreDb: any = null;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const configRaw = fs.readFileSync(configPath, 'utf8');
+    const appletConfig = JSON.parse(configRaw);
+    if (appletConfig && appletConfig.apiKey && appletConfig.projectId) {
+      let firebaseApp;
+      if (getApps().length > 0) {
+        firebaseApp = getApp();
+      } else {
+        firebaseApp = initializeApp(appletConfig);
+      }
+      if (appletConfig.firestoreDatabaseId) {
+        serverFirestoreDb = getFirestore(firebaseApp, appletConfig.firestoreDatabaseId);
+        console.log(`[Database Firebase Init] Success on project ${appletConfig.projectId}, database ID ${appletConfig.firestoreDatabaseId}`);
+      } else {
+        serverFirestoreDb = getFirestore(firebaseApp);
+        console.log(`[Database Firebase Init] Success on project ${appletConfig.projectId}`);
+      }
+    }
+  }
+} catch (err) {
+  console.warn('[Database Firebase Init] Firestore was not initialized on backend:', err);
+}
+
+// Helpers to push to Firestore
+async function syncLeadToFirestore(lead: Lead) {
+  if (!serverFirestoreDb) return;
+  try {
+    const docRef = doc(serverFirestoreDb, 'leads', lead.id);
+    const cleanLead = JSON.parse(JSON.stringify(lead));
+    await setDoc(docRef, cleanLead);
+    console.log(`[Database Firebase Sync] Successfully inserted/updated lead ${lead.id} to Firestore.`);
+  } catch (err) {
+    console.error(`[Database Firebase Sync] Failed to sync lead ${lead.id} to Firestore:`, err);
+  }
+}
+
+async function syncLeadStatusToFirestore(id: string, status: string) {
+  if (!serverFirestoreDb) return;
+  try {
+    const docRef = doc(serverFirestoreDb, 'leads', id);
+    await updateDoc(docRef, { status });
+    console.log(`[Database Firebase Sync] Successfully updated status of lead ${id} to ${status} in Firestore.`);
+  } catch (err) {
+    console.error(`[Database Firebase Sync] Failed to update status of lead ${id} in Firestore:`, err);
+  }
+}
+
+async function syncDeleteLeadFromFirestore(id: string) {
+  if (!serverFirestoreDb) return;
+  try {
+    const docRef = doc(serverFirestoreDb, 'leads', id);
+    await deleteDoc(docRef);
+    console.log(`[Database Firebase Sync] Successfully deleted lead ${id} from Firestore.`);
+  } catch (err) {
+    console.error(`[Database Firebase Sync] Failed to delete lead ${id} from Firestore:`, err);
+  }
+}
 
 // Convert DB row to domain Tasks object
 function mapDbRowToTask(r: any): Task {
@@ -319,7 +385,7 @@ export const dbService = {
       // Fallback to In-memory logic
       list = inMemoryLeads;
     }
-    return list.filter(l => l && l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' && l.name?.trim() !== 'Saidul');
+    return list.filter(l => l && (l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' || l.name?.trim() !== 'Saidul'));
   },
 
   async getLeadById(id: string): Promise<Lead | null> {
@@ -348,14 +414,20 @@ export const dbService = {
             preferences, lead_score, phone_verified, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
+        const safeName = String(lead.name || 'Anonymous').trim();
+        const safeEmail = String(lead.email || '').trim();
+        const safePhone = String(lead.phone || '').trim();
+        const safeSource = String(lead.source || 'Website Form').trim();
+        const safeStatus = String(lead.status || 'New').trim();
+
         await pool.execute(sql, [
           lead.id,
           lead.userId || 'ielts_crm_main_user',
-          lead.name,
-          lead.email,
-          lead.phone,
-          lead.source,
-          lead.status,
+          safeName,
+          safeEmail,
+          safePhone,
+          safeSource,
+          safeStatus,
           lead.expectedValue || 0,
           lead.notes || null,
           lead.targetCourse || 'IELTS Academic',
@@ -370,6 +442,7 @@ export const dbService = {
           lead.createdAt || Date.now()
         ]);
         console.log(`[MySQL] Inserted lead ${lead.id} successfully`);
+        await syncLeadToFirestore(lead);
         return;
       } catch (err) {
         console.error('[MySQL] insertLead failed. Falling back to in-memory store:', err);
@@ -377,6 +450,7 @@ export const dbService = {
     }
     // Fallback logic
     inMemoryLeads.unshift(lead);
+    await syncLeadToFirestore(lead);
   },
 
   async updateLeadStatus(id: string, status: string): Promise<Lead | null> {
@@ -386,7 +460,9 @@ export const dbService = {
         const [rows] = await pool.execute('SELECT * FROM leads WHERE id = ?', [id]);
         const results = rows as any[];
         if (results.length > 0) {
-          return mapDbRowToLead(results[0]);
+          const updated = mapDbRowToLead(results[0]);
+          await syncLeadStatusToFirestore(id, status);
+          return updated;
         }
         return null;
       } catch (err) {
@@ -397,6 +473,7 @@ export const dbService = {
     const lead = inMemoryLeads.find(l => l.id === id);
     if (lead) {
       lead.status = status as any;
+      await syncLeadStatusToFirestore(id, status);
       return lead;
     }
     return null;
@@ -434,7 +511,9 @@ export const dbService = {
         const [rows] = await pool.execute('SELECT * FROM leads WHERE id = ?', [id]);
         const results = rows as any[];
         if (results.length > 0) {
-          return mapDbRowToLead(results[0]);
+          const updated = mapDbRowToLead(results[0]);
+          await syncLeadToFirestore(updated);
+          return updated;
         }
         return null;
       } catch (err) {
@@ -445,6 +524,7 @@ export const dbService = {
     const index = inMemoryLeads.findIndex(l => l.id === id);
     if (index !== -1) {
       inMemoryLeads[index] = { ...inMemoryLeads[index], ...updateData };
+      await syncLeadToFirestore(inMemoryLeads[index]);
       return inMemoryLeads[index];
     }
     return null;
@@ -458,6 +538,7 @@ export const dbService = {
         if (results.length > 0) {
           const oldLead = mapDbRowToLead(results[0]);
           await pool.execute('DELETE FROM leads WHERE id = ?', [id]);
+          await syncDeleteLeadFromFirestore(id);
           return oldLead;
         }
         return null;
@@ -469,6 +550,7 @@ export const dbService = {
     const index = inMemoryLeads.findIndex(l => l.id === id);
     if (index !== -1) {
       const deleted = inMemoryLeads.splice(index, 1);
+      await syncDeleteLeadFromFirestore(id);
       return deleted[0];
     }
     return null;

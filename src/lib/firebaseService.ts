@@ -298,7 +298,7 @@ if (String(err).toLowerCase().includes('offline')) {
     }
 
     // Filter out the requested delete of template lead "Saidul" with email "sdflj@gmail.com"
-    return result.filter(l => l && l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' && l.name?.trim() !== 'Saidul');
+    return result.filter(l => l && (l.email?.toLowerCase().trim() !== 'sdflj@gmail.com' || l.name?.trim() !== 'Saidul'));
   },
 
   async insertLead(lead: Lead): Promise<void> {

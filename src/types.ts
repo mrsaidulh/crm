@@ -145,6 +145,9 @@ export interface UserSettings {
   googleMeasurementId?: string;
   googleApiSecret?: string;
   googleMapping?: Record<string, string>;
+  
+  // Custom CRM API Integration Settings
+  crmApiKey?: string;
 }
 
 export interface WorkflowRule {

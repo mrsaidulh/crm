@@ -7,7 +7,7 @@ import { useAuth } from '../lib/AuthContext';
 import { firebaseService, initFirebase, disconnectFirebase } from '../lib/firebaseService';
 import { triggerWebhookProxy } from '../utils/automation';
 
-type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'sources' | 'n8n' | 'database';
+type Tab = 'profile' | 'team' | 'security' | 'notifications' | 'api_keys' | 'developer_api_keys' | 'sources' | 'n8n' | 'database';
 
 function LiveMetaTestBlock({ settings }: { settings: UserSettings }) {
   const [testing, setTesting] = useState(false);
@@ -338,6 +338,17 @@ export default function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+
+  // CRM API copy status & guide toggle states
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [showApiGuide, setShowApiGuide] = useState(false);
+
+  const handleGenerateCrmApiKey = () => {
+    const key = 'irc_live_' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    setSettings({ ...settings, crmApiKey: key });
+  };
 
   // Two-Factor Authentication temporary states
   const [isConfiguringMfa, setIsConfiguringMfa] = useState(false);
@@ -891,6 +902,9 @@ export default function SettingsView() {
           </button>
           <button onClick={() => setActiveTab('api_keys')} className={navItemClass('api_keys')}>
             <Key className="w-4 h-4" /> Integrations & API
+          </button>
+          <button onClick={() => setActiveTab('developer_api_keys')} className={navItemClass('developer_api_keys')}>
+            <KeyRound className="w-4 h-4 text-emerald-500" /> API Keys
           </button>
           <button onClick={() => setActiveTab('n8n')} className={navItemClass('n8n')}>
             <Cpu className="w-4 h-4 text-orange-500" /> n8n Automation
@@ -1485,8 +1499,7 @@ export default function SettingsView() {
                   <p className="text-sm text-slate-500">Configure third-party gateways for calls, SMS, and payments.</p>
                 </div>
               </div>
-              
-              <form onSubmit={handleSaveSettings} className="space-y-6">
+                           <form onSubmit={handleSaveSettings} className="space-y-6">
                 <div>
                   <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center">
@@ -1997,6 +2010,243 @@ export default function SettingsView() {
                   >
                     <Save className="w-4 h-4" />
                     {saving ? 'Saving...' : 'Save Keys'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {activeTab === 'developer_api_keys' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 font-sans tracking-tight">API Keys</h2>
+                  <p className="text-sm text-slate-500 mt-1">Provide secure keys to connect external landing pages, forms, and tools with your CRM.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="space-y-6">
+                {/* IELTS Revolution CRM Public API & Remote Web Form Integration */}
+                <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 mb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shadow-3xs">
+                        <Key className="w-4 h-4 text-indigo-650" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800">IELTS Revolution CRM API</h3>
+                        <p className="text-[11px] text-slate-500 font-semibold">Integrate external landing pages and contact forms seamlessly.</p>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                        CORS Active
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    {/* CRM API Endpoint URL Block */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider font-display">Your CRM API Base URL (Private Dev Endpoint)</label>
+                      <div className="relative flex items-stretch">
+                        <input
+                          type="text"
+                          readOnly
+                          value={window.location.origin + '/api'}
+                          className="w-full text-xs font-mono bg-slate-50 border border-slate-200 text-slate-500 rounded-xl pl-4 pr-12 py-2.5 focus:outline-none focus:ring-1 focus:ring-slate-350 select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.origin + '/api');
+                            setCopiedUrl(true);
+                            setTimeout(() => setCopiedUrl(false), 2000);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-640 transition-colors cursor-pointer"
+                          title="Copy Private URL"
+                        >
+                          {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Append <code className="bg-slate-100 font-mono text-[9px] px-1 py-0.5 rounded text-slate-600">/leads</code> for lead creation and <code className="bg-slate-100 font-mono text-[9px] px-1 py-0.5 rounded text-slate-600">/otp/send</code> for OTP.</p>
+
+                      {/* Intelligent security warning detection and public shared alternative URL constructor */}
+                      {window.location.origin.includes('-dev-') && (
+                        <div className="mt-4 p-4.5 bg-rose-50/70 border border-rose-100 rounded-2xl space-y-3">
+                          <div className="flex gap-2.5">
+                            <AlertCircle className="w-4.5 h-4.5 text-rose-500 shrink-0 mt-0.5" />
+                            <div>
+                              <h4 className="text-xs font-bold text-rose-900 font-display">⚠️ Private URL Cookie-Wall Warning</h4>
+                              <p className="text-[11px] text-rose-700 leading-relaxed mt-1">
+                                You are viewing this inside the restricted <strong>AI Studio Developer Mode</strong>. 
+                                The private development URL is protected by Google session cookies, which blocks public CORS requests 
+                                from your external WordPress or HTML landing page.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="bg-white/80 border border-rose-100 rounded-xl p-3 space-y-2">
+                            <span className="block text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                              👉 Use this CRM API URL on your external landing page:
+                            </span>
+                            <div className="relative flex items-stretch">
+                              <input
+                                type="text"
+                                readOnly
+                                value={window.location.origin.replace('-dev-', '-pre-') + '/api'}
+                                className="w-full text-xs font-mono bg-indigo-50/20 text-indigo-700 border border-indigo-100 rounded-lg pl-3 pr-10 py-1.5 focus:outline-none font-bold"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(window.location.origin.replace('-dev-', '-pre-') + '/api');
+                                  // Use temporary state to help visual confirmation
+                                  const tempBtn = document.getElementById('copied-pre-notif');
+                                  if (tempBtn) {
+                                    tempBtn.innerText = 'Copied!';
+                                    setTimeout(() => tempBtn.innerText = 'Copy Public', 2000);
+                                  }
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-600 hover:text-indigo-800 transition-colors uppercase cursor-pointer pr-1"
+                                id="copied-pre-notif"
+                              >
+                                Copy Public
+                              </button>
+                            </div>
+                            <span className="block text-[9px] text-slate-400 leading-normal">
+                              This public endpoint operates securely on the <strong>Shared (Production) App URL</strong> without authorization barriers while maintaining CORS accessibility.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CRM Secret API Authorization Key block */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">CRM Secret API Key</label>
+                        <button
+                          type="button"
+                          onClick={handleGenerateCrmApiKey}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-850 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3 hover:rotate-180 transition-all duration-300" />
+                          {settings.crmApiKey ? 'Regenerate API Key' : 'Generate Secure Key'}
+                        </button>
+                      </div>
+
+                      <div className="relative flex items-stretch">
+                        <input
+                          type="text"
+                          placeholder="No API Key active. Generate one to secure your third-party web forms."
+                          value={settings.crmApiKey || ''}
+                          onChange={(e) => setSettings({ ...settings, crmApiKey: e.target.value })}
+                          className={`w-full text-xs font-mono bg-white border rounded-xl pl-4 pr-12 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${settings.crmApiKey ? 'border-slate-200 text-slate-800' : 'border-amber-205 text-amber-600 bg-amber-50/10 placeholder-amber-500'}`}
+                        />
+                        {settings.crmApiKey && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(settings.crmApiKey || '');
+                              setCopiedKey(true);
+                              setTimeout(() => setCopiedKey(false), 2000);
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                            title="Copy API Key"
+                          >
+                            {copiedKey ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                      
+                      <p className="text-[10px] text-slate-500 mt-1.5 flex gap-1 items-start leading-relaxed animate-in slide-in-from-top-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" />
+                        <span>
+                          Provide this secret key in the <code className="bg-slate-100 font-mono text-[9px] px-1 py-0.5 rounded">X-CRM-API-Key</code> request header. 
+                          {settings.crmApiKey ? (
+                            <span className="text-indigo-600 font-medium ml-1">Make sure to save settings to activate!</span>
+                          ) : (
+                            <span className="text-amber-600 font-semibold ml-1">No API key is defined. External post requests will bypass authorization credentials.</span>
+                          )}
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Collapsible Remote Integration Guide & Copyable Snippets */}
+                    <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-3xs transition-all">
+                      <button
+                        type="button"
+                        onClick={() => setShowApiGuide(!showApiGuide)}
+                        className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 flex items-center justify-between text-left cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Database className="w-4 h-4 text-indigo-500" />
+                          <span className="text-xs font-bold text-slate-700">Show Remote Integration Guide & Copy-Paste Web Form Code</span>
+                        </div>
+                        <span className="text-xs font-mono text-slate-400">{showApiGuide ? '[- Close]' : '[+ View Code & Guide]'}</span>
+                      </button>
+
+                      {showApiGuide && (
+                        <div className="p-4 space-y-4 animate-in fade-in duration-200 select-none">
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800 mb-2">⚡ How to Connect Any External Contact Form to Your CRM</h4>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              You can capture interest leads from separate WordPress landing pages, custom HTML websites, Facebook lead setups, or external apps directly into this CRM pipeline by running remote POST requests. 
+                            </p>
+                            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                              If a <strong className="font-semibold text-slate-705">CRM Secret API Key</strong> is defined above, you must include the <code className="bg-slate-100 px-1 py-0.5 font-mono text-[10px] rounded text-indigo-600">X-CRM-API-Key</code> request header matching that value, otherwise the submission will fail with a 401 Unauthorized status.
+                            </p>
+                          </div>
+
+                          <div className="border-t border-slate-150 pt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Example Integration Code (Contact Form + Phone OTP Verification)</h5>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const keyVal = settings.crmApiKey || 'YOUR_CRM_SECRET_API_KEY_HERE';
+                                  const urlVal = window.location.origin + '/api';
+                                  const snippet = getApiCodeSnippet(urlVal, keyVal);
+                                  navigator.clipboard.writeText(snippet);
+                                  setCopiedSnippet(true);
+                                  setTimeout(() => setCopiedSnippet(false), 2000);
+                                }}
+                                className="text-[10px] font-bold text-indigo-650 hover:text-indigo-850 flex items-center gap-1 cursor-pointer"
+                              >
+                                {copiedSnippet ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                {copiedSnippet ? 'Copied Snippet!' : 'Copy Integration Code'}
+                              </button>
+                            </div>
+
+                            <div className="relative">
+                              <pre className="text-[10px] text-slate-700 bg-slate-900 text-slate-100 p-4 rounded-xl font-mono overflow-x-auto max-h-80 select-all leading-normal whitespace-pre-wrap">
+                                {getApiCodeSnippet(window.location.origin + '/api', settings.crmApiKey || 'YOUR_CRM_SECRET_API_KEY_HERE')}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div>
+                    {saveMessage && (
+                      <span className={`text-sm ${saveMessage.includes('Error') ? 'text-red-500' : 'text-emerald-600'}`}>
+                        {saveMessage}
+                      </span>
+                    )}
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={saving}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? 'Saving...' : 'Save API Key'}
                   </button>
                 </div>
               </form>
@@ -2639,4 +2889,90 @@ export default function SettingsView() {
       )}
     </div>
   );
+}
+
+function getApiCodeSnippet(url: string, key: string) {
+  return `/* 
+  IELTS REVOLUTION CRM INTEGRATION PROTOCOL
+  Drop this Javascript into your landing page or external application 
+  to submit leads and verify phone numbers via OTP dynamically!
+*/
+
+// Endpoint configuration
+const CRM_BASE_URL = "${url}";
+const CRM_API_KEY = "${key}";
+
+/**
+ * Step 1: Dispatch OTP to user phone number
+ * @param {string} phoneNumber - Full phone number to verify (e.g., "01811112222")
+ */
+async function sendPhoneOtp(phoneNumber) {
+  try {
+    const res = await fetch(\`\${CRM_BASE_URL}/otp/send\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CRM-API-Key': CRM_API_KEY
+      },
+      body: JSON.stringify({ phone: phoneNumber })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to dispatch verification code');
+    return data; // returns { success: true, message, demoCode }
+  } catch (err) {
+    console.error('Error dispatching OTP:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Step 2: Validate the OTP pin code and submit the complete Lead payload on successful match
+ * @param {object} leadData - All lead data captured on your external form
+ * @param {string} otpCode - 6-digit verification pin inputted by the user
+ */
+async function verifyOtpAndSubmitLead(leadData, otpCode) {
+  try {
+    // A: First verify the OTP code code
+    const otpVerifyRes = await fetch(\`\${CRM_BASE_URL}/otp/verify\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CRM-API-Key': CRM_API_KEY
+      },
+      body: JSON.stringify({ phone: leadData.phone, code: otpCode })
+    });
+    
+    const otpData = await otpVerifyRes.json();
+    if (!otpVerifyRes.ok || !otpData.success) {
+      throw new Error(otpData.error || 'Invalid OTP verification code');
+    }
+
+    // B: OTP match successful. Send the lead dataset securely to the database
+    const leadRes = await fetch(\`\${CRM_BASE_URL}/leads\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CRM-API-Key': CRM_API_KEY
+      },
+      body: JSON.stringify({
+        name: leadData.name,
+        email: leadData.email,
+        phone: leadData.phone,
+        targetCourse: leadData.targetCourse || 'IELTS Academic',
+        targetBand: leadData.targetBand || '7.5',
+        destination: leadData.destination || 'United Kingdom',
+        source: 'External Landing Form',
+        phoneVerified: true
+      })
+    });
+
+    const leadResult = await leadRes.json();
+    if (!leadRes.ok) throw new Error(leadResult.error || 'Error recording lead to database');
+    
+    return leadResult; // Lead recorded successfully!
+  } catch (err) {
+    console.error('Submission failed:', err.message);
+    throw err;
+  }
+}`;
 }

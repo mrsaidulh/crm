@@ -237,14 +237,75 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// --- CROSS-ORIGIN CORS & CRM API INTEGRATION MIDDLEWARE ---
+app.use(async (req, res, next) => {
+  // Manual CORS Implementation for external forms and API clients
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CRM-API-Key');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  // Identify public API paths (supporting both /api/ and root-aliased paths for landing page integrations)
+  const publicPaths = [
+    '/api/leads', '/api/otp/send', '/api/otp/verify',
+    '/leads', '/otp/send', '/otp/verify'
+  ];
+  if (publicPaths.includes(req.path)) {
+    // Check if it's a local request from the CRM UI/Public Form itself
+    const host = req.headers.host || '';
+    const referer = req.headers.referer || '';
+    const isLocalRequest = 
+      req.headers['sec-fetch-site'] === 'same-origin' || 
+      req.headers['sec-fetch-site'] === 'same-site' ||
+      (referer && referer.includes(host));
+
+    if (!isLocalRequest) {
+      // For external requests, check if the CRM owner has configured an API key in settings
+      const userId = req.body.userId || req.query.userId || 'ielts_crm_main_user';
+      try {
+        const userSettings = await dbService.getSettings(userId);
+        const configuredApiKey = userSettings?.crmApiKey;
+
+        if (configuredApiKey && configuredApiKey.trim().length > 0) {
+          let providedKey = req.headers['x-crm-api-key'] || req.query.apiKey || req.body.crmApiKey;
+          
+          // Fallback support for standard Authorization Bearer header
+          if (!providedKey && req.headers['authorization']) {
+            const authHeader = String(req.headers['authorization']);
+            if (authHeader.toLowerCase().startsWith('bearer ')) {
+              providedKey = authHeader.substring(7).trim();
+            } else {
+              providedKey = authHeader.trim();
+            }
+          }
+
+          if (!providedKey || providedKey.trim() !== configuredApiKey.trim()) {
+            return res.status(401).json({ 
+              success: false,
+              error: 'Unauthorized request. A valid API key is required. Please provide it in the X-CRM-API-Key or Authorization Bearer header.' 
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[API Gateway Auth] Error checking CRM API key:', err);
+      }
+    }
+  }
+
+  next();
+});
+
 
 // --- API ROUTES ---
 
 // In-memory store for active OTP codes to verify phone numbers, with phone number key and { code, expiresAt } value
 const activeOtps = new Map<string, { code: string; expiresAt: number }>();
 
-// POST /api/otp/send
-app.post('/api/otp/send', async (req, res) => {
+// POST /api/otp/send (also aliased on root /otp/send)
+app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
   const { phone } = req.body;
   
   if (!phone) {
@@ -293,8 +354,8 @@ app.post('/api/otp/send', async (req, res) => {
   });
 });
 
-// POST /api/otp/verify
-app.post('/api/otp/verify', (req, res) => {
+// POST /api/otp/verify (also aliased on root /otp/verify)
+app.post(['/api/otp/verify', '/otp/verify'], (req, res) => {
   const { phone, code } = req.body;
 
   if (!phone || !code) {
@@ -367,8 +428,8 @@ app.get('/api/db-status', (req, res) => {
   });
 });
 
-// GET /api/leads
-app.get('/api/leads', async (req, res) => {
+// GET /api/leads (also aliased on root /leads)
+app.get(['/api/leads', '/leads'], async (req, res) => {
   try {
     const userId = req.query.userId as string || undefined;
     const leadsList = await dbService.getLeads(userId);
@@ -378,25 +439,32 @@ app.get('/api/leads', async (req, res) => {
   }
 });
 
-// POST /api/leads
-app.post('/api/leads', async (req, res) => {
+// POST /api/leads (also aliased on root /leads)
+app.post(['/api/leads', '/leads'], async (req, res) => {
   try {
-    const { name, email, phone, targetCourse, targetBand, destination } = req.body;
+    const { name, phone } = req.body;
     
-    // Strict backend validation safety guards
+    // Strict backend validation safety guards: Only Name and Phone are strictly mandated
     const missing: string[] = [];
-    if (!name || !name.trim()) missing.push('Full Name');
-    if (!email || !email.trim()) missing.push('Email Address');
-    if (!phone || !phone.trim()) missing.push('Phone Number');
-    if (!targetCourse || !targetCourse.trim()) missing.push('Target Course');
-    if (!targetBand || !targetBand.toString().trim()) missing.push('Target Band');
-    if (!destination || !destination.trim()) missing.push('Target Country');
+    if (!name || !String(name).trim()) missing.push('Full Name');
+    if (!phone || !String(phone).trim()) missing.push('Phone Number');
 
     if (missing.length > 0) {
       return res.status(400).json({ error: `Please fill in all required fields: ${missing.join(', ')}` });
     }
 
     const bodyCopy = { ...req.body };
+    
+    // Guarantee smart defaults for optional fields to satisfy NOT NULL constraints and DB consistency
+    bodyCopy.name = String(bodyCopy.name || '').trim();
+    bodyCopy.phone = String(bodyCopy.phone || '').trim();
+    bodyCopy.email = String(bodyCopy.email || '').trim(); // Blank is allowed and respects NOT NULL
+    bodyCopy.targetCourse = String(bodyCopy.targetCourse || 'IELTS Academic').trim();
+    bodyCopy.targetBand = String(bodyCopy.targetBand || '7.0').trim();
+    bodyCopy.destination = String(bodyCopy.destination || 'United Kingdom').trim();
+    bodyCopy.source = String(bodyCopy.source || 'Website Form').trim();
+    bodyCopy.status = String(bodyCopy.status || 'New').trim();
+
     if (bodyCopy.phone) {
       let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
       if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {

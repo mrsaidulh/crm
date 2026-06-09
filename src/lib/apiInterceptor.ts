@@ -152,6 +152,17 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       
       if (pathname === '/api/leads' && method === 'POST') {
         const bodyCopy = { ...body };
+        
+        // Populate intelligent default values for the optional fields
+        bodyCopy.name = String(bodyCopy.name || 'Anonymous').trim();
+        bodyCopy.phone = String(bodyCopy.phone || '').trim();
+        bodyCopy.email = String(bodyCopy.email || '').trim();
+        bodyCopy.targetCourse = String(bodyCopy.targetCourse || 'IELTS Academic').trim();
+        bodyCopy.targetBand = String(bodyCopy.targetBand || '7.0').trim();
+        bodyCopy.destination = String(bodyCopy.destination || 'United Kingdom').trim();
+        bodyCopy.source = String(bodyCopy.source || 'Website Form').trim();
+        bodyCopy.status = String(bodyCopy.status || 'New').trim();
+
         if (bodyCopy.phone) {
           let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
           if (phoneCleaned.startsWith('01') && phoneCleaned.length === 11) {
