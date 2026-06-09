@@ -319,11 +319,7 @@ try {
           await conn.query("ALTER TABLE `settings` ADD COLUMN `google_mapping` JSON DEFAULT NULL");
         } catch (alterColErr) {}
 
-        // Wipe all previous lead and activity logs data as requested by the user
-        await conn.query('DELETE FROM `leads`');
-        await conn.query('DELETE FROM `tasks`');
-        await conn.query('DELETE FROM `campaigns`');
-        console.log('[MySQL] Auto-initialized crm_users_auth table, added safety Columns, and wiped previous lead/task data successfully.');
+        console.log('[MySQL] Auto-initialized crm_users_auth table and added safety columns successfully.');
       } catch (tableErr: any) {
         console.warn('[MySQL] Failed to auto-create and alter tables or wipe previous data:', tableErr.message);
       }

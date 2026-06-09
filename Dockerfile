@@ -32,6 +32,9 @@ COPY --from=builder /app/dist ./dist
 # Copy the lightweight production-package.json so we can install just raw required dependencies
 COPY --from=builder /app/production-package.json ./package.json
 
+# Copy firebase config file if present in compilation workspace (using wildcard to prevent build crash if missing)
+COPY --from=builder /app/firebase-applet-config.json* ./
+
 # Install production-only dependencies in the workspace root (/app/node_modules)
 RUN npm install --omit=dev
 
