@@ -351,7 +351,14 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
   // 3. Dispatch the message if a valid API Key exists
   if (smsApiKey && smsApiKey !== 'mock_bulksmsbd_key') {
     try {
-      const cleanedPhone = phone.replace(/[^0-9+]/g, ''); // standardizing number format
+      // Normalize Bangladesh phone formatting to start with 880 (e.g. 8801712327286)
+      let cleanedPhone = phone.replace(/[^0-9]/g, '');
+      if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
+        cleanedPhone = '88' + cleanedPhone;
+      } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
+        cleanedPhone = '880' + cleanedPhone;
+      }
+
       let finalApiUrl = '';
 
       if (smsProvider === 'bulk_sms_bd') {
@@ -374,15 +381,15 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
         }
       }
 
-      console.log(`[OTP Server] Dispatching dynamic OTP request to: ${smsProvider} API`);
+      console.log(`[OTP Server] Dispatching dynamic OTP request to: ${smsProvider} API for phone: ${cleanedPhone}`);
       const response = await fetch(finalApiUrl);
       const data = await response.text();
-      console.log(`[OTP Server] API response:`, data);
+      console.log(`[OTP Server] API response from ${smsProvider}:`, data);
       
       return res.json({ 
         success: true, 
-        message: `OTP sent successfully via ${smsProvider}`, 
-        demoCode: otpCode // returned for frictionless sandbox testing (and as a safety fallback)
+        message: `OTP sent successfully via ${smsProvider}`
+        // demoCode is omitted here so that end users do not see the bypass widget on standard live submissions
       });
     } catch (smsError: any) {
       console.error(`[OTP Server] Failed to dispatch SMS via ${smsProvider}:`, smsError);

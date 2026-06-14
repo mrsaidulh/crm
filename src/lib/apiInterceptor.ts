@@ -60,11 +60,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         console.log(`[API Interceptor] Simulated OTP for ${phone}: ${otpCode}`);
 
         // Try to fetch settings to see if SMS API is configured
+        let isLiveSend = false;
         try {
           const settings = await firebaseService.getSettings('ielts_crm_main_user');
           if (settings && settings.smsApiKey) {
+            isLiveSend = true;
+            let cleanedPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
+              cleanedPhone = '88' + cleanedPhone;
+            } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
+              cleanedPhone = '880' + cleanedPhone;
+            }
+
             let externalUrl = '';
-            const cleanedPhone = phone.replace(/[^0-9+]/g, '');
             if (settings.smsProvider === 'bulk_sms_bd') {
                externalUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(settings.smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(settings.smsSenderId || '8801844532633')}&message=${encodeURIComponent(smsMessage)}`;
             } else if (settings.smsProvider === 'sms_bd') {
@@ -94,8 +102,8 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
 
         return jsonResponse({
           success: true,
-          message: 'OTP sent (Simulated in interceptor or API sent)',
-          demoCode: otpCode // Returned for testing purposes to autocomplete input
+          message: isLiveSend ? 'OTP dispatched via dynamic SMS API' : 'OTP generated in simulation mode',
+          demoCode: isLiveSend ? undefined : otpCode // Omit demoCode when sending live SMS
         });
       }
 
