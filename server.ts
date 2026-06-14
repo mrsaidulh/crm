@@ -301,27 +301,8 @@ app.use(async (req, res, next) => {
 
 // --- API ROUTES ---
 
-// In-memory store for active OTP codes to verify phone numbers, with phone number key and { code, expiresAt } value
-const activeOtps = new Map<string, { code: string; expiresAt: number }>();
-
-// POST /api/otp/send (also aliased on root /otp/send)
-app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
-  const { phone } = req.body;
-  
-  if (!phone) {
-    return res.status(400).json({ error: 'Phone number is required' });
-  }
-
-  // Generate a random 6-digit OTP code
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiry
-
-  activeOtps.set(phone, { code: otpCode, expiresAt });
-
-  const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
-
-  console.log(`[OTP] Generated OTP for ${phone}: ${otpCode}`);
-
+// Helper function to send actual SMS
+async function sendActualSms(phone: string, smsMessage: string, userId: string): Promise<{ success: boolean; provider: string; status: 'Sent' | 'Failed'; errorDetails?: string }> {
   let smsApiKey = '';
   let smsSenderId = '8801844532633'; // approved or default sender ID
   let smsProvider = 'bulk_sms_bd';
@@ -329,16 +310,19 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 
   // 1. Try to fetch dynamic settings from the database first
   try {
-    const dbSettings = await dbService.getSettings('ielts_crm_main_user');
+    let dbSettings = await dbService.getSettings(userId);
+    if (!dbSettings || !dbSettings.smsApiKey) {
+      dbSettings = await dbService.getAnyActiveSmsSettings();
+    }
     if (dbSettings && dbSettings.smsApiKey) {
       smsApiKey = dbSettings.smsApiKey;
       smsSenderId = dbSettings.smsSenderId || smsSenderId;
       smsProvider = dbSettings.smsProvider || 'bulk_sms_bd';
       smsApiUrl = dbSettings.smsApiUrl || '';
-      console.log(`[OTP Server] Loaded dynamic gateway settings from database. Provider: ${smsProvider}, SenderId: ${smsSenderId}`);
+      console.log(`[SMS Server] Loaded dynamic gateway settings from database. Provider: ${smsProvider}, SenderId: ${smsSenderId}`);
     }
   } catch (dbErr) {
-    console.warn('[OTP Server] Error fetching database settings, falling back to environment variables:', dbErr);
+    console.warn('[SMS Server] Error fetching database settings:', dbErr);
   }
 
   // 2. Fall back to Environment variables if no database settings exist or if overridden
@@ -348,17 +332,17 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
     smsProvider = 'bulk_sms_bd';
   }
 
+  // Normalize Bangladesh phone formatting to start with 880 (e.g. 8801712327286)
+  let cleanedPhone = phone.replace(/[^0-9]/g, '');
+  if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
+    cleanedPhone = '88' + cleanedPhone;
+  } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
+    cleanedPhone = '880' + cleanedPhone;
+  }
+
   // 3. Dispatch the message if a valid API Key exists
   if (smsApiKey && smsApiKey !== 'mock_bulksmsbd_key') {
     try {
-      // Normalize Bangladesh phone formatting to start with 880 (e.g. 8801712327286)
-      let cleanedPhone = phone.replace(/[^0-9]/g, '');
-      if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
-        cleanedPhone = '88' + cleanedPhone;
-      } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
-        cleanedPhone = '880' + cleanedPhone;
-      }
-
       let finalApiUrl = '';
 
       if (smsProvider === 'bulk_sms_bd') {
@@ -381,24 +365,101 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
         }
       }
 
-      console.log(`[OTP Server] Dispatching dynamic OTP request to: ${smsProvider} API for phone: ${cleanedPhone}`);
+      console.log(`[SMS Server] Dispatching dynamic request to: ${smsProvider} API for phone: ${cleanedPhone}`);
       const response = await fetch(finalApiUrl);
       const data = await response.text();
-      console.log(`[OTP Server] API response from ${smsProvider}:`, data);
-      
-      return res.json({ 
-        success: true, 
-        message: `OTP sent successfully via ${smsProvider}`
-        // demoCode is omitted here so that end users do not see the bypass widget on standard live submissions
-      });
+      console.log(`[SMS Server] API response from ${smsProvider}:`, data);
+
+      let logStatus: 'Sent' | 'Failed' = 'Sent';
+      let errorDetails: string | undefined = undefined;
+
+      if (!response.ok) {
+        logStatus = 'Failed';
+        errorDetails = `HTTP Status: ${response.status}`;
+      } else {
+        const lowerData = data.toLowerCase();
+        if (lowerData.includes('error') || lowerData.includes('invalid') || lowerData.includes('failed') || lowerData.includes('auth')) {
+          logStatus = 'Failed';
+          errorDetails = data.substring(0, 250);
+        }
+      }
+
+      await dbService.insertSmsLog({
+        id: `sms_${uuidv4().substring(0, 8)}`,
+        userId: userId,
+        phone: cleanedPhone || phone,
+        message: smsMessage,
+        provider: smsProvider,
+        status: logStatus,
+        errorDetails,
+        sentAt: Date.now()
+      }).catch(e => console.error('[SMS Log Error]', e));
+
+      return { success: logStatus === 'Sent', provider: smsProvider, status: logStatus, errorDetails };
     } catch (smsError: any) {
-      console.error(`[OTP Server] Failed to dispatch SMS via ${smsProvider}:`, smsError);
-      // Fallback gracefully so testing is not blocked
+      console.error(`[SMS Server] Failed to dispatch SMS via ${smsProvider}:`, smsError);
+      const errorStr = smsError.message || String(smsError);
+      await dbService.insertSmsLog({
+        id: `sms_${uuidv4().substring(0, 8)}`,
+        userId: userId,
+        phone: cleanedPhone || phone,
+        message: smsMessage,
+        provider: smsProvider,
+        status: 'Failed',
+        errorDetails: errorStr,
+        sentAt: Date.now()
+      }).catch(e => console.error('[SMS Log Error]', e));
+
+      return { success: false, provider: smsProvider, status: 'Failed', errorDetails: errorStr };
     }
   }
 
   // Fallback to simulation print
-  console.log(`[OTP Simulation] Message to ${phone}: ${smsMessage}`);
+  console.log(`[SMS Simulation] Message to ${phone}: ${smsMessage}`);
+  await dbService.insertSmsLog({
+    id: `sms_${uuidv4().substring(0, 8)}`,
+    userId: userId,
+    phone: phone,
+    message: smsMessage,
+    provider: 'Simulation',
+    status: 'Sent',
+    errorDetails: 'Development Sandbox. Gateway Simulation.',
+    sentAt: Date.now()
+  }).catch(e => console.error('[SMS Log Error]', e));
+
+  return { success: true, provider: 'Simulation', status: 'Sent', errorDetails: 'Simulation Sandbox' };
+}
+
+// In-memory store for active OTP codes to verify phone numbers, with phone number key and { code, expiresAt } value
+const activeOtps = new Map<string, { code: string; expiresAt: number }>();
+
+// POST /api/otp/send (also aliased on root /otp/send)
+app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
+  const { phone } = req.body;
+  
+  if (!phone) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  // Generate a random 6-digit OTP code
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiry
+
+  activeOtps.set(phone, { code: otpCode, expiresAt });
+
+  const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
+
+  console.log(`[OTP] Generated OTP for ${phone}: ${otpCode}`);
+
+  const runResult = await sendActualSms(phone, smsMessage, 'ielts_crm_main_user');
+
+  if (runResult.provider !== 'Simulation') {
+    return res.json({ 
+      success: true, 
+      message: `OTP sent successfully via ${runResult.provider}`
+    });
+  }
+
   return res.json({ 
     success: true, 
     message: 'OTP generated in simulation mode (no live SMS key configured)', 
@@ -703,27 +764,94 @@ app.delete('/api/leads/:id', async (req, res) => {
 // POST /api/campaigns/sms
 app.post('/api/campaigns/sms', async (req, res) => {
   const { audience, message, userId } = req.body;
-  
-  if (!process.env.BULKSMSBD_API_KEY) {
-    console.warn("BULKSMSBD_API_KEY is missing, but simulating success.");
-  }
-  
+  const targetUserId = userId || 'ielts_crm_main_user';
+
   const newCampaign = {
     id: req.body.id || uuidv4(),
     type: 'SMS' as const,
-    audience,
+    audience: audience || 'All Contacts',
     message,
     sentAt: req.body.sentAt || Date.now(),
     status: 'Sent',
-    userId: userId || 'ielts_crm_main_user'
+    userId: targetUserId
   };
 
   try {
+    // 1. Fetch matching audience list
+    const leadsList = await dbService.getLeads(targetUserId);
+
+    // Filter leads matching the audience segment
+    const matchedLeads = leadsList.filter(lead => {
+      if (!audience) return false;
+      const cleanAudience = String(audience).trim();
+      const status = lead.status as string;
+
+      if (cleanAudience === 'All Contacts') return true;
+      if (cleanAudience === 'New Leads') return status === 'New Lead' || status === 'New';
+      if (cleanAudience === 'Contacted Leads') return status === 'Contact' || status === 'Contacted';
+      if (cleanAudience === 'Follow-up Required') return status === 'Follow-up Required' || status === 'Follow-up';
+      if (cleanAudience === 'Consultation Booked') return status === 'Consultation Booked';
+      if (cleanAudience === 'Demo Class Booked') return status === 'Demo Class Booked' || status === 'Demo Class';
+      if (cleanAudience === 'Payment Pending') return status === 'Payment Pending';
+      if (cleanAudience === 'Re-engagement Offer') return status === 'Re-engagement Offer';
+      if (cleanAudience === 'Enrolled Students') return status === 'Enrolled';
+      if (cleanAudience === 'Discarded Leads') return status === 'Discarded';
+
+      // Fallback matching: if the lead's name or email or phone is equal to audience
+      if (lead.phone === cleanAudience || lead.id === cleanAudience || lead.name === cleanAudience) {
+        return true;
+      }
+      return false;
+    });
+
+    let recipients: string[] = [];
+    if (matchedLeads.length > 0) {
+      recipients = matchedLeads.map(l => l.phone).filter(Boolean);
+    } else {
+      // If no matched leads but the audience is a phone number itself
+      const audienceDigits = audience ? String(audience).replace(/[^0-9]/g, '') : '';
+      if (audienceDigits.length >= 8 && audienceDigits.length <= 15) {
+        recipients = [String(audience).trim()];
+      }
+    }
+
+    console.log(`[SMS Campaign] Dispatching broadcast to ${recipients.length} recipients for segment "${audience}"`);
+
+    // 2. Dispatch to each recipient concurrently
+    let sentCount = 0;
+    let failedCount = 0;
+
+    if (recipients.length > 0) {
+      const dispatchPromises = recipients.map(async (phone) => {
+        try {
+          const runResult = await sendActualSms(phone, message, targetUserId);
+          if (runResult.success) {
+            sentCount++;
+          } else {
+            failedCount++;
+          }
+        } catch (dispatchErr) {
+          console.error(`[SMS Campaign Error] Failed to send to ${phone}:`, dispatchErr);
+          failedCount++;
+        }
+      });
+      await Promise.allSettled(dispatchPromises);
+    }
+
+    // 3. Save Campaign execution logs
     await dbService.insertCampaign(newCampaign);
-    setTimeout(() => {
-      res.json({ success: true, campaign: newCampaign });
-    }, 800);
+
+    res.json({
+      success: true,
+      campaign: { ...newCampaign, status: 'Sent' },
+      deliverySummary: {
+        totalTargets: recipients.length,
+        sent: sentCount,
+        failed: failedCount
+      }
+    });
   } catch (err: any) {
+    console.error('[SMS Campaign POST] Error executing campaign:', err);
     res.status(500).json({ error: err.message || 'Error inserting SMS campaign' });
   }
 });
@@ -863,6 +991,32 @@ app.delete('/api/audit-logs', async (req, res) => {
     res.json({ success: true, message: 'Audit logs cleared successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error clearing audit logs' });
+  }
+});
+
+// GET /api/sms-logs
+app.get('/api/sms-logs', async (req, res) => {
+  try {
+    const userId = req.query.userId as string || undefined;
+    const logs = await dbService.getSmsLogs(userId);
+    res.json({ logs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error fetching SMS log history' });
+  }
+});
+
+// POST /api/sms-logs
+app.post('/api/sms-logs', async (req, res) => {
+  try {
+    const { action, userId: bodyUserId } = req.body;
+    const userId = (req.query.userId as string) || bodyUserId || undefined;
+    if (action === 'CLEAR') {
+      await dbService.clearSmsLogs(userId);
+      return res.json({ success: true, message: 'SMS logs cleared successfully' });
+    }
+    res.status(400).json({ error: 'Unsupported action spec' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error executing SMS log action' });
   }
 });
 

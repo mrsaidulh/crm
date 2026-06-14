@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { Lead, Campaign, AuditLog, Task, Template, WorkflowRule, UserSettings, TeamMember } from '../types';
+import { Lead, Campaign, AuditLog, Task, Template, WorkflowRule, UserSettings, TeamMember, SmsLog } from '../types';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import fs from 'fs';
@@ -77,6 +77,7 @@ let inMemoryWorkflows: WorkflowRule[] = [];
 let inMemorySettings: Record<string, UserSettings> = {};
 let inMemoryTeamMembers: TeamMember[] = [];
 let inMemoryUsers: ManualAuthUser[] = [];
+let inMemorySmsLogs: SmsLog[] = [];
 
 // Initialize backend Firestore if config exists
 let serverFirestoreDb: any = null;
@@ -357,6 +358,27 @@ try {
         try {
           await conn.query("ALTER TABLE `settings` ADD COLUMN `google_mapping` JSON DEFAULT NULL");
         } catch (alterColErr) {}
+
+        // Create SMS Logs table
+        try {
+          await conn.query(`
+            CREATE TABLE IF NOT EXISTS \`sms_logs\` (
+              \`id\` VARCHAR(128) NOT NULL,
+              \`user_id\` VARCHAR(128) DEFAULT NULL,
+              \`phone\` VARCHAR(64) NOT NULL,
+              \`message\` TEXT NOT NULL,
+              \`provider\` VARCHAR(64) NOT NULL,
+              \`status\` VARCHAR(32) NOT NULL,
+              \`error_details\` TEXT DEFAULT NULL,
+              \`sent_at\` BIGINT NOT NULL,
+              PRIMARY KEY (\`id\`),
+              KEY \`idx_phone\` (\`phone\`),
+              KEY \`idx_sent_at\` (\`sent_at\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+          `);
+        } catch (smsTableErr: any) {
+          console.warn('[MySQL] Failed to create sms_logs table:', smsTableErr.message);
+        }
 
         console.log('[MySQL] Auto-initialized crm_users_auth table and added safety columns successfully.');
       } catch (tableErr: any) {
@@ -752,6 +774,85 @@ export const dbService = {
     }
   },
 
+  // --- SMS LOGS INTERACTION ROUTES ---
+  async getSmsLogs(userId?: string): Promise<SmsLog[]> {
+    if (pool) {
+      try {
+        let rows: any[];
+        if (userId) {
+          const [results] = await pool.execute('SELECT * FROM sms_logs WHERE user_id = ? ORDER BY sent_at DESC', [userId]);
+          rows = results as any[];
+        } else {
+          const [results] = await pool.execute('SELECT * FROM sms_logs ORDER BY sent_at DESC');
+          rows = results as any[];
+        }
+        return rows.map(r => ({
+          id: r.id,
+          userId: r.user_id || undefined,
+          phone: r.phone,
+          message: r.message,
+          provider: r.provider,
+          status: r.status as any,
+          errorDetails: r.error_details || undefined,
+          sentAt: typeof r.sent_at === 'number' ? r.sent_at : Number(r.sent_at)
+        }));
+      } catch (err) {
+        console.error('[MySQL] getSmsLogs failed. Falling back to in-memory:', err);
+      }
+    }
+    if (userId) {
+      return inMemorySmsLogs.filter(log => log.userId === userId || !log.userId);
+    }
+    return inMemorySmsLogs;
+  },
+
+  async insertSmsLog(log: SmsLog): Promise<void> {
+    if (pool) {
+      try {
+        const sql = `
+          INSERT INTO sms_logs (id, user_id, phone, message, provider, status, error_details, sent_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        await pool.execute(sql, [
+          log.id,
+          log.userId || null,
+          log.phone,
+          log.message,
+          log.provider,
+          log.status,
+          log.errorDetails || null,
+          log.sentAt || Date.now()
+        ]);
+        console.log(`[MySQL] Saved SMS log ${log.id} successfully`);
+        return;
+      } catch (err) {
+        console.error('[MySQL] insertSmsLog failed. Falling back to in-memory:', err);
+      }
+    }
+    inMemorySmsLogs.unshift(log);
+  },
+
+  async clearSmsLogs(userId?: string): Promise<void> {
+    if (pool) {
+      try {
+        if (userId) {
+          await pool.execute('DELETE FROM sms_logs WHERE user_id = ? OR user_id IS NULL', [userId]);
+        } else {
+          await pool.execute('DELETE FROM sms_logs');
+        }
+        console.log(`[MySQL] Cleared SMS logs for user: ${userId || 'All'}`);
+        return;
+      } catch (err) {
+        console.error('[MySQL] clearSmsLogs failed:', err);
+      }
+    }
+    if (userId) {
+      inMemorySmsLogs = inMemorySmsLogs.filter(log => log.userId !== userId);
+    } else {
+      inMemorySmsLogs = [];
+    }
+  },
+
   // --- SETTINGS ---
   async getSettings(userId: string): Promise<UserSettings | null> {
     if (pool) {
@@ -767,6 +868,27 @@ export const dbService = {
       }
     }
     return inMemorySettings[userId] || null;
+  },
+
+  async getAnyActiveSmsSettings(): Promise<UserSettings | null> {
+    if (pool) {
+      try {
+        const [rows] = await pool.execute('SELECT * FROM settings WHERE sms_api_key IS NOT NULL AND sms_api_key != "" LIMIT 1');
+        const results = rows as any[];
+        if (results.length > 0) {
+          return mapDbRowToSettings(results[0]);
+        }
+      } catch (err) {
+        console.error('[MySQL] getAnyActiveSmsSettings failed:', err);
+      }
+    }
+    for (const key of Object.keys(inMemorySettings)) {
+      const entry = inMemorySettings[key];
+      if (entry && entry.smsApiKey) {
+        return entry;
+      }
+    }
+    return null;
   },
 
   async saveSettings(userId: string, settings: UserSettings): Promise<void> {

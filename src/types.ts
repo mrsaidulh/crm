@@ -184,3 +184,14 @@ export interface AuditLog {
   createdAt: number;
 }
 
+export interface SmsLog {
+  id: string;
+  userId?: string;
+  phone: string;
+  message: string;
+  provider: string;
+  status: 'Sent' | 'Failed' | 'Delivered';
+  errorDetails?: string;
+  sentAt: number;
+}
+

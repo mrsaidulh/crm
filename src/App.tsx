@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, MessageSquare, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck, ShieldAlert, Lock, Unlock, Timer, Check, Copy, KeyRound } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck, ShieldAlert, Lock, Unlock, Timer, Check, Copy, KeyRound, History } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { TOTP } from 'totp-generator';
 import Dashboard from './components/Dashboard';
@@ -13,9 +13,10 @@ import TemplatesView from './components/TemplatesView';
 import SettingsView from './components/SettingsView';
 import WorkflowsView from './components/WorkflowsView';
 import AuditLogsView from './components/AuditLogsView';
+import SmsLogsView from './components/SmsLogsView';
 import { useAuth } from './lib/AuthContext';
 
-type View = 'dashboard' | 'funnel' | 'leads' | 'customers' | 'tasks' | 'campaigns' | 'templates' | 'forms' | 'workflows' | 'settings' | 'audit';
+type View = 'dashboard' | 'funnel' | 'leads' | 'customers' | 'tasks' | 'campaigns' | 'templates' | 'forms' | 'workflows' | 'settings' | 'audit' | 'sms-logs';
 
 
 export default function App() {
@@ -499,6 +500,8 @@ export default function App() {
         return <SettingsView />;
       case 'audit':
         return <AuditLogsView />;
+      case 'sms-logs':
+        return <SmsLogsView />;
     }
   };
 
@@ -594,6 +597,7 @@ export default function App() {
             </div>
             <nav className="px-4 space-y-1">
               <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" />
+              <NavItem view="sms-logs" icon={<History className="w-5 h-5" />} label="SMS Delivery Logs" />
             </nav>
           </div>
         </div>

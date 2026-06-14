@@ -48,82 +48,9 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       console.log(`[API Interceptor] ${method} ${pathname}`, { queryParams, body });
 
       // --- OTP VERIFICATION ---
-      if (pathname === '/api/otp/send' && method === 'POST') {
-        const phone = body?.phone;
-        if (!phone) return jsonResponse({ error: 'Phone number is required' }, 400);
-
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
-        activeOtps.set(phone, { code: otpCode, expiresAt });
-
-        const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
-        console.log(`[API Interceptor] Simulated OTP for ${phone}: ${otpCode}`);
-
-        // Try to fetch settings to see if SMS API is configured
-        let isLiveSend = false;
-        try {
-          const settings = await firebaseService.getSettings('ielts_crm_main_user');
-          if (settings && settings.smsApiKey) {
-            isLiveSend = true;
-            let cleanedPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
-              cleanedPhone = '88' + cleanedPhone;
-            } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
-              cleanedPhone = '880' + cleanedPhone;
-            }
-
-            let externalUrl = '';
-            if (settings.smsProvider === 'bulk_sms_bd') {
-               externalUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(settings.smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(settings.smsSenderId || '8801844532633')}&message=${encodeURIComponent(smsMessage)}`;
-            } else if (settings.smsProvider === 'sms_bd') {
-               externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
-            } else if (settings.smsProvider === 'greenweb') {
-               externalUrl = `http://api.greenweb.com.bd/api.php?token=${encodeURIComponent(settings.smsApiKey)}&to=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
-            } else {
-               // Custom URL format with interpolation support
-               if (settings.smsApiUrl) {
-                 externalUrl = settings.smsApiUrl
-                   .replace(/\{\{api_key\}\}/gi, encodeURIComponent(settings.smsApiKey))
-                   .replace(/\{\{phone\}\}/gi, encodeURIComponent(cleanedPhone))
-                   .replace(/\{\{message\}\}/gi, encodeURIComponent(smsMessage))
-                   .replace(/\{\{sender_id\}\}/gi, encodeURIComponent(settings.smsSenderId || ''));
-               } else {
-                 externalUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(settings.smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
-               }
-            }
-
-            // Attempt to hit the actual API through CORS (Client-side)
-            // If it fails due to CORS, it will gracefully fallback to simulated mode.
-            await originalFetch(externalUrl).catch(e => console.warn('[OTP API Error]', e));
-          }
-        } catch (e) {
-          console.error('[OTP Fetch Error]', e);
-        }
-
-        return jsonResponse({
-          success: true,
-          message: isLiveSend ? 'OTP dispatched via dynamic SMS API' : 'OTP generated in simulation mode',
-          demoCode: isLiveSend ? undefined : otpCode // Omit demoCode when sending live SMS
-        });
-      }
-
-      if (pathname === '/api/otp/verify' && method === 'POST') {
-        const phone = body?.phone;
-        const code = body?.code;
-
-        if (!phone || !code) return jsonResponse({ error: 'Phone and code required' }, 400);
-        const record = activeOtps.get(phone);
-
-        if (!record) return jsonResponse({ error: 'No OTP requested for this phone' }, 400);
-        if (Date.now() > record.expiresAt) {
-          activeOtps.delete(phone);
-          return jsonResponse({ error: 'OTP code expired' }, 400);
-        }
-        if (record.code !== code.trim()) return jsonResponse({ error: 'Invalid verification code' }, 400);
-
-        activeOtps.delete(phone);
-        return jsonResponse({ success: true, message: 'Verified successfully' });
-      }
+      // We do not intercept /api/otp/send or /api/otp/verify client-side anymore.
+      // This allows requests to transparently fall through to the real Node.js backend server,
+      // which handles server-side SMS dispatch securely without browser CORS or Mixed Content limitations.
 
       // --- WEBHOOK TRIGGER PROXY ---
       if (pathname === '/api/automation/trigger-webhook' && method === 'POST') {
