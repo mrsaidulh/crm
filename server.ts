@@ -318,7 +318,7 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 
   activeOtps.set(phone, { code: otpCode, expiresAt });
 
-  const smsMessage = `Your IELTS CRM verification code is: ${otpCode}. It is valid for 5 minutes.`;
+  const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
 
   console.log(`[OTP] Generated OTP for ${phone}: ${otpCode}`);
 

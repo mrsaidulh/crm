@@ -56,7 +56,7 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
         activeOtps.set(phone, { code: otpCode, expiresAt });
 
-        const smsMessage = `Your CRM verification code is: ${otpCode}. Valid for 5 minutes.`;
+        const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
         console.log(`[API Interceptor] Simulated OTP for ${phone}: ${otpCode}`);
 
         // Try to fetch settings to see if SMS API is configured
