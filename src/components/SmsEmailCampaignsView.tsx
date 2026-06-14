@@ -90,7 +90,12 @@ export default function SmsEmailCampaignsView() {
     
     const endpoint = activeTab === 'SMS' ? '/api/campaigns/sms' : '/api/campaigns/email';
     const payload = activeTab === 'SMS' 
-      ? { audience, message, userId }
+      ? { 
+          audience, 
+          message, 
+          userId,
+          recipientPhones: targetedLeads.map(l => l.phone).filter(Boolean)
+        }
       : { audience, subject, body: message, userId };
 
     try {

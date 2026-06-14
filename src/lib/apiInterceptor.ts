@@ -361,6 +361,20 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       if (pathname === '/api/settings' && method === 'GET') {
         const userId = queryParams.userId || 'ielts_crm_main_user';
         const settings = await firebaseService.getSettings(userId);
+        
+        // Background heal/sync settings to Express backend so SMS credentials are never empty on the server
+        if (settings) {
+          try {
+            originalFetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, settings })
+            }).catch(() => {});
+          } catch (e) {
+            console.warn('[API Interceptor] Background settings sync failed:', e);
+          }
+        }
+        
         return jsonResponse({ settings });
       }
       
@@ -368,6 +382,19 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         const userId = body.userId || 'ielts_crm_main_user';
         const settingsObj = body.settings || {};
         await firebaseService.saveSettings(userId, settingsObj);
+        
+        // Propagate to real Express backend (MySQL / in-memory list)
+        try {
+          await originalFetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          console.log('[API Interceptor] Successfully sync-duplicated settings modifications to MySQL/Express.');
+        } catch (e) {
+          console.warn('[API Interceptor] Sync settings to MySQL/Express failed:', e);
+        }
+        
         return jsonResponse({ success: true, settings: settingsObj });
       }
 

@@ -885,14 +885,16 @@ app.post('/api/campaigns/sms', async (req, res) => {
       return false;
     });
 
-    let recipients: string[] = [];
-    if (matchedLeads.length > 0) {
-      recipients = matchedLeads.map(l => l.phone).filter(Boolean);
-    } else {
-      // If no matched leads but the audience is a phone number itself
-      const audienceDigits = audience ? String(audience).replace(/[^0-9]/g, '') : '';
-      if (audienceDigits.length >= 8 && audienceDigits.length <= 15) {
-        recipients = [String(audience).trim()];
+    let recipients: string[] = req.body.recipientPhones || [];
+    if (recipients.length === 0) {
+      if (matchedLeads.length > 0) {
+        recipients = matchedLeads.map(l => l.phone).filter(Boolean);
+      } else {
+        // If no matched leads but the audience is a phone number itself
+        const audienceDigits = audience ? String(audience).replace(/[^0-9]/g, '') : '';
+        if (audienceDigits.length >= 8 && audienceDigits.length <= 15) {
+          recipients = [String(audience).trim()];
+        }
       }
     }
 
