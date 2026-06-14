@@ -4,9 +4,9 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList, Clock, ArrowRight, Sparkles, Tag } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
-import type { Lead, Stats, Task, AuditLog, LeadStatus } from '../types';
+import type { Lead, Stats, Task, AuditLog, LeadStatus, Campaign } from '../types';
 import { logAuditEvent } from '../utils/auditLogger';
-import { Server, WifiOff, AlertTriangle, RefreshCw, Key, HelpCircle } from 'lucide-react';
+import { Server, WifiOff, AlertTriangle, RefreshCw, Key, HelpCircle, AlertCircle, X, Sliders } from 'lucide-react';
 
 function formatDuration(ms: number): string {
   if (ms <= 0 || isNaN(ms)) return '0m';
@@ -29,6 +29,14 @@ export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [failedSmsThreshold, setFailedSmsThreshold] = useState<number>(() => {
+    const saved = localStorage.getItem('crm_failed_sms_thresh');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const [showFailedSmsAlert, setShowFailedSmsAlert] = useState<boolean>(true);
+  const [retryId, setRetryId] = useState<string | null>(null);
+  const [retryMsg, setRetryMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config?: any; error?: string } | null>(null);
@@ -75,9 +83,10 @@ export default function Dashboard() {
     Promise.all([
       fetch(`/api/leads?userId=${encodeURIComponent(userId)}`),
       fetch(`/api/tasks?userId=${encodeURIComponent(userId)}`),
-      fetch(`/api/audit-logs?userId=${encodeURIComponent(userId)}`)
+      fetch(`/api/audit-logs?userId=${encodeURIComponent(userId)}`),
+      fetch(`/api/campaigns?userId=${encodeURIComponent(userId)}`)
     ])
-      .then(async ([leadsRes, tasksRes, logsRes]) => {
+      .then(async ([leadsRes, tasksRes, logsRes, campaignsRes]) => {
         if (!leadsRes.ok) {
           const body = await leadsRes.text();
           let parsed;
@@ -96,9 +105,15 @@ export default function Dashboard() {
           try { parsed = JSON.parse(body); } catch (_) {}
           throw new Error(parsed?.error || parsed?.message || body || `Audit Logs API error ${logsRes.status}`);
         }
-        return Promise.all([leadsRes.json(), tasksRes.json(), logsRes.json()]);
+        if (!campaignsRes.ok) {
+          const body = await campaignsRes.text();
+          let parsed;
+          try { parsed = JSON.parse(body); } catch (_) {}
+          throw new Error(parsed?.error || parsed?.message || body || `Campaigns API error ${campaignsRes.status}`);
+        }
+        return Promise.all([leadsRes.json(), tasksRes.json(), logsRes.json(), campaignsRes.json()]);
       })
-      .then(([leadsData, tasksData, logsData]) => {
+      .then(([leadsData, tasksData, logsData, campaignsData]) => {
         if (leadsData && leadsData.leads) {
           setLeads(leadsData.leads);
         }
@@ -109,6 +124,9 @@ export default function Dashboard() {
           setAuditLogs(logsData.logs);
         } else if (logsData && Array.isArray(logsData)) {
           setAuditLogs(logsData);
+        }
+        if (campaignsData && campaignsData.campaigns) {
+          setCampaigns(campaignsData.campaigns);
         }
       })
       .catch(err => {
@@ -359,6 +377,15 @@ export default function Dashboard() {
     return { total, completed, pending };
   }, [tasksDueToday]);
 
+  const failedSmsInLast24Hours = useMemo(() => {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    return campaigns.filter(camp => 
+      camp.type === 'SMS' && 
+      camp.status === 'Failed' && 
+      camp.sentAt >= oneDayAgo
+    );
+  }, [campaigns]);
+
   const handleToggleTaskStatus = async (task: Task) => {
     const newStatus = task.status === 'Pending' ? 'Completed' : 'Pending';
     try {
@@ -549,6 +576,37 @@ export default function Dashboard() {
     });
   })();
 
+  const handleRetryCampaign = async (campId: string) => {
+    setRetryId(campId);
+    setRetryMsg(null);
+    try {
+      const res = await fetch('/api/campaigns/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: campId, userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCampaigns(prev => prev.map(c => c.id === campId ? { ...c, status: 'Sent' } : c));
+        setRetryMsg('SMS has been resent successfully!');
+        logAuditEvent({
+          action: 'Campaign Resent from Dashboard Alert',
+          entityType: 'campaign',
+          entityId: campId,
+          details: `Dashboard quick retry executed for failed SMS broadcast ID: ${campId}`
+        });
+        setTimeout(() => setRetryMsg(null), 4000);
+      } else {
+        alert(data.error || 'Failed to retry dispatching campaign.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error trying to retry campaign.');
+    } finally {
+      setRetryId(null);
+    }
+  };
+
   const COLORS = ['#11347a', '#10b981', '#f59e0b', '#e31837', '#8b5cf6', '#0ea5e9', '#64748b'];
 
   return (
@@ -595,6 +653,134 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Failed SMS Threshold Alert Banner */}
+      {showFailedSmsAlert && failedSmsInLast24Hours.length >= failedSmsThreshold && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-rose-50 border border-rose-200/80 rounded-2xl p-5 shadow-sm space-y-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex gap-3">
+              <div className="bg-rose-100 text-rose-600 p-2.5 rounded-xl shrink-0 h-11 w-11 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-rose-950 font-display flex items-center gap-2">
+                  System Delivery Alert: Failed SMS Threshold Exceeded
+                  <span className="px-2 py-0.5 bg-rose-600 text-white rounded-full font-sans font-black text-[10px] tracking-wide animate-pulse">
+                    CRITICAL
+                  </span>
+                </h3>
+                <p className="text-xs text-rose-700/90 mt-1 font-sans">
+                  The dashboard detected that <span className="font-bold">{failedSmsInLast24Hours.length} SMS messages</span> failed to dispatch in the last 24 hours, exceeding your alert threshold of <span className="font-bold">{failedSmsThreshold}</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              {/* Threshold Adjust controller */}
+              <div className="hidden sm:flex items-center gap-1.5 bg-white/85 border border-rose-200 rounded-lg px-2 py-1 text-xs">
+                <Sliders className="w-3.5 h-3.5 text-rose-600" />
+                <span className="text-[11px] font-semibold text-rose-900">SMS Alert Threshold:</span>
+                <select
+                  value={failedSmsThreshold}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setFailedSmsThreshold(val);
+                    localStorage.setItem('crm_failed_sms_thresh', String(val));
+                  }}
+                  className="bg-transparent text-rose-900 font-bold focus:outline-none cursor-pointer border-none p-0"
+                >
+                  <option value="1">1 Failure</option>
+                  <option value="2">2 Failures</option>
+                  <option value="3">3 Failures</option>
+                  <option value="5">5 Failures</option>
+                  <option value="10">10 Failures</option>
+                </select>
+              </div>
+
+              {/* Dismiss button */}
+              <button
+                onClick={() => setShowFailedSmsAlert(false)}
+                className="text-rose-500 hover:text-rose-800 p-1 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                title="Dismiss Alert"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Resend / Inspection List inside Alert */}
+          <div className="bg-white/80 border border-rose-200/25 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-widest font-extrabold text-rose-800 flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5" />
+                Unsent SMS Queue ({failedSmsInLast24Hours.length} items from past 24 hrs)
+              </span>
+              {retryMsg && (
+                <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 animate-pulse">
+                  {retryMsg}
+                </span>
+              )}
+            </div>
+
+            <div className="divide-y divide-rose-100/60 max-h-48 overflow-y-auto">
+              {failedSmsInLast24Hours.map(camp => (
+                <div key={camp.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800">Segment: {camp.audience}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        ID: {camp.id} • {format(new Date(camp.sentAt), "h:mm a")}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 truncate max-w-xl italic">
+                      "{camp.message || camp.body}"
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    {retryId === camp.id ? (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded text-slate-500 font-semibold animate-pulse text-[11px]">
+                        <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />
+                        Resending...
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRetryCampaign(camp.id)}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs py-1 px-2.5 rounded-lg transition-all shadow-xs hover:scale-105"
+                      >
+                        Resend Trigger
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex sm:hidden items-center justify-between gap-1.5 border-t border-rose-100 pt-3 text-xs">
+            <span className="text-[10px] font-semibold text-rose-900">SMS Alert Threshold:</span>
+            <select
+              value={failedSmsThreshold}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                setFailedSmsThreshold(val);
+                localStorage.setItem('crm_failed_sms_thresh', String(val));
+              }}
+              className="bg-white border border-rose-200 rounded-md text-rose-900 font-bold focus:outline-none cursor-pointer p-1"
+            >
+              <option value="1">1 Failure</option>
+              <option value="2">2 Failures</option>
+              <option value="3">3 Failures</option>
+              <option value="5">5 Failures</option>
+              <option value="10">10 Failures</option>
+            </select>
+          </div>
+        </motion.div>
+      )}
 
       {/* Daily Digest Dashboard Section */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-950/40 rounded-2xl p-5 text-white shadow-sm space-y-4 animate-in fade-in duration-300">

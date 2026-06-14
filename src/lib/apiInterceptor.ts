@@ -301,6 +301,45 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
         return jsonResponse({ success: true, campaign: newCampaign });
       }
 
+      if (pathname === '/api/campaigns/status' && method === 'PUT') {
+        const { campaignId, status } = body || {};
+        await firebaseService.updateCampaignStatus(campaignId, status);
+        try {
+          await originalFetch('/api/campaigns/status', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId, status })
+          });
+        } catch (e) {
+          console.warn('[API Interceptor] Sync campaign status to MySQL failed:', e);
+        }
+        return jsonResponse({ success: true, campaignId, status });
+      }
+
+      if (pathname === '/api/campaigns/retry' && method === 'POST') {
+        const { campaignId, userId } = body || {};
+        const campaigns = await firebaseService.getCampaigns(userId);
+        const originalCampaign = campaigns.find(c => c.id === campaignId);
+        if (!originalCampaign) {
+          return jsonResponse({ error: 'Campaign to retry not found' }, 404);
+        }
+
+        const updatedStatus = 'Sent';
+        await firebaseService.updateCampaignStatus(campaignId, updatedStatus);
+        try {
+          await originalFetch('/api/campaigns/retry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId, userId })
+          });
+        } catch (e) {
+          console.warn('[API Interceptor] Sync retry to MySQL failed:', e);
+        }
+
+        const updatedCampaign = { ...originalCampaign, status: updatedStatus };
+        return jsonResponse({ success: true, campaign: updatedCampaign });
+      }
+
       // --- STATS ---
       if (pathname === '/api/stats' && method === 'GET') {
         const userId = queryParams.userId;

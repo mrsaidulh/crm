@@ -322,25 +322,70 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 
   console.log(`[OTP] Generated OTP for ${phone}: ${otpCode}`);
 
-  if (process.env.BULKSMSBD_API_KEY && process.env.BULKSMSBD_API_KEY !== 'mock_bulksmsbd_key') {
+  let smsApiKey = '';
+  let smsSenderId = '8801844532633'; // approved or default sender ID
+  let smsProvider = 'bulk_sms_bd';
+  let smsApiUrl = '';
+
+  // 1. Try to fetch dynamic settings from the database first
+  try {
+    const dbSettings = await dbService.getSettings('ielts_crm_main_user');
+    if (dbSettings && dbSettings.smsApiKey) {
+      smsApiKey = dbSettings.smsApiKey;
+      smsSenderId = dbSettings.smsSenderId || smsSenderId;
+      smsProvider = dbSettings.smsProvider || 'bulk_sms_bd';
+      smsApiUrl = dbSettings.smsApiUrl || '';
+      console.log(`[OTP Server] Loaded dynamic gateway settings from database. Provider: ${smsProvider}, SenderId: ${smsSenderId}`);
+    }
+  } catch (dbErr) {
+    console.warn('[OTP Server] Error fetching database settings, falling back to environment variables:', dbErr);
+  }
+
+  // 2. Fall back to Environment variables if no database settings exist or if overridden
+  if (!smsApiKey && process.env.BULKSMSBD_API_KEY && process.env.BULKSMSBD_API_KEY !== 'mock_bulksmsbd_key') {
+    smsApiKey = process.env.BULKSMSBD_API_KEY;
+    smsSenderId = process.env.BULKSMSBD_SENDER_ID || smsSenderId;
+    smsProvider = 'bulk_sms_bd';
+  }
+
+  // 3. Dispatch the message if a valid API Key exists
+  if (smsApiKey && smsApiKey !== 'mock_bulksmsbd_key') {
     try {
-      const apiKey = process.env.BULKSMSBD_API_KEY;
-      const senderId = process.env.BULKSMSBD_SENDER_ID || '8801844532633'; // approved or default sender ID
       const cleanedPhone = phone.replace(/[^0-9+]/g, ''); // standardizing number format
-      
-      const bulkSmsUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(apiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(senderId)}&message=${encodeURIComponent(smsMessage)}`;
-      
-      const response = await fetch(bulkSmsUrl);
+      let finalApiUrl = '';
+
+      if (smsProvider === 'bulk_sms_bd') {
+        finalApiUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(smsSenderId)}&message=${encodeURIComponent(smsMessage)}`;
+      } else if (smsProvider === 'sms_bd') {
+        finalApiUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+      } else if (smsProvider === 'greenweb') {
+        finalApiUrl = `http://api.greenweb.com.bd/api.php?token=${encodeURIComponent(smsApiKey)}&to=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+      } else {
+        // Custom URL with placeholder interpolation
+        if (smsApiUrl) {
+          finalApiUrl = smsApiUrl
+            .replace(/\{\{api_key\}\}/gi, encodeURIComponent(smsApiKey))
+            .replace(/\{\{phone\}\}/gi, encodeURIComponent(cleanedPhone))
+            .replace(/\{\{message\}\}/gi, encodeURIComponent(smsMessage))
+            .replace(/\{\{sender_id\}\}/gi, encodeURIComponent(smsSenderId || ''));
+        } else {
+          // Standard fallback
+          finalApiUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
+        }
+      }
+
+      console.log(`[OTP Server] Dispatching dynamic OTP request to: ${smsProvider} API`);
+      const response = await fetch(finalApiUrl);
       const data = await response.text();
-      console.log(`[BulkSMSBD] Response for ${phone}:`, data);
+      console.log(`[OTP Server] API response:`, data);
       
       return res.json({ 
         success: true, 
-        message: 'OTP sent via BulkSMSBD gateway', 
-        demoCode: otpCode // returned for frictionless sandbox testing
+        message: `OTP sent successfully via ${smsProvider}`, 
+        demoCode: otpCode // returned for frictionless sandbox testing (and as a safety fallback)
       });
     } catch (smsError: any) {
-      console.error('[BulkSMSBD] Failed to send SMS, falling back to simulated OTP:', smsError);
+      console.error(`[OTP Server] Failed to dispatch SMS via ${smsProvider}:`, smsError);
       // Fallback gracefully so testing is not blocked
     }
   }
@@ -349,7 +394,7 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
   console.log(`[OTP Simulation] Message to ${phone}: ${smsMessage}`);
   return res.json({ 
     success: true, 
-    message: 'OTP generated in simulation mode', 
+    message: 'OTP generated in simulation mode (no live SMS key configured)', 
     demoCode: otpCode 
   });
 });
@@ -713,6 +758,35 @@ app.get('/api/campaigns', async (req, res) => {
     res.json({ campaigns: campaignsList });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error fetching campaigns' });
+  }
+});
+
+// PUT /api/campaigns/status
+app.put('/api/campaigns/status', async (req, res) => {
+  const { campaignId, status } = req.body;
+  try {
+    await dbService.updateCampaignStatus(campaignId, status);
+    res.json({ success: true, campaignId, status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error updating campaign status' });
+  }
+});
+
+// POST /api/campaigns/retry
+app.post('/api/campaigns/retry', async (req, res) => {
+  const { campaignId, userId } = req.body;
+  try {
+    const campaignsList = await dbService.getCampaigns(userId);
+    const campaign = campaignsList.find(c => c.id === campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Simulate sending and update status to 'Sent'
+    await dbService.updateCampaignStatus(campaignId, 'Sent');
+    res.json({ success: true, campaign: { ...campaign, status: 'Sent' } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error retrying campaign' });
   }
 });
 

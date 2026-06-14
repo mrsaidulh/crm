@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2, AlertTriangle, Upload } from 'lucide-react';
+import { Search, Plus, Filter, Mail, Phone, Edit2, Trash2, X, Download, ArrowUpDown, Tag, Globe, Sparkles, CheckCircle2, AlertTriangle, Upload, ChevronRight, ChevronDown, GraduationCap, Sliders, BookOpen, Clock, FileText, Check, RefreshCw } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, LeadStatus, LeadSource } from '../types';
 import { calculateLeadScore } from '../utils/scoring';
@@ -19,6 +19,17 @@ export default function LeadsView() {
   const [sortBy, setSortBy] = useState<string>('createdAt-desc');
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  
+  // Row Expansion States
+  const [expandedLeadIds, setExpandedLeadIds] = useState<string[]>([]);
+  const [editingNotesText, setEditingNotesText] = useState<Record<string, string>>({});
+  const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
+
+  const toggleLeadExpand = (leadId: string) => {
+    setExpandedLeadIds(prev => 
+      prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId]
+    );
+  };
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   
@@ -1607,127 +1618,345 @@ export default function LeadsView() {
                 sortedLeads.map((lead, idx) => {
                   const scoreDetails = calculateLeadScore(lead);
                   const isSelected = selectedLeadIds.includes(lead.id);
+                  const isExpanded = expandedLeadIds.includes(lead.id);
                   return (
-                    <tr key={lead.id ? `${lead.id}-${idx}` : `lead-idx-${idx}`} className={`hover:bg-slate-50/50 transition-colors group ${isSelected ? 'bg-indigo-50/30' : ''}`}>
-                      <td className="pl-6 pr-2 py-4 w-10">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            setSelectedLeadIds(prev => 
-                              prev.includes(lead.id) ? prev.filter(id => id !== lead.id) : [...prev, lead.id]
-                            );
-                          }}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
-                          <span>{lead.name}</span>
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`} title={`Lead Score: ${scoreDetails.score} (${scoreDetails.level})`}>
-                            ★ {scoreDetails.score}
-                          </span>
-                        </div>
-                        
-                        {/* Tags Pill Container */}
-                        {lead.tags && lead.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {lead.tags.map((tag, idx) => (
-                              <span 
-                                key={`${tag}-${idx}`} 
-                                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700/80 border border-indigo-100/50"
-                              >
-                                <Tag className="w-2 h-2 text-indigo-400" />
-                                {tag}
-                              </span>
-                            ))}
+                    <React.Fragment key={lead.id ? `${lead.id}-${idx}` : `lead-idx-${idx}`}>
+                      <tr 
+                        className={`hover:bg-slate-50/50 transition-colors cursor-pointer group ${isSelected ? 'bg-indigo-50/30' : ''} ${isExpanded ? 'bg-slate-50/70 border-b-none' : ''}`}
+                        onClick={(e) => {
+                          const isInteractive = (e.target as HTMLElement).closest('select, input, button, a, [role="button"]');
+                          if (!isInteractive) {
+                            toggleLeadExpand(lead.id);
+                          }
+                        }}
+                      >
+                        <td className="pl-6 pr-2 py-4 w-14">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedLeadIds(prev => 
+                                  prev.includes(lead.id) ? prev.filter(id => id !== lead.id) : [...prev, lead.id]
+                                );
+                              }}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4 shrink-0"
+                            />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleLeadExpand(lead.id);
+                              }}
+                              className="p-0.5 rounded hover:bg-slate-200/50 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                              title={isExpanded ? "Collapse Details" : "Expand Details"}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </button>
                           </div>
-                        )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
+                            <span>{lead.name}</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`} title={`Lead Score: ${scoreDetails.score} (${scoreDetails.level})`}>
+                              ★ {scoreDetails.score}
+                            </span>
+                          </div>
+                          
+                          {/* Tags Pill Container */}
+                          {lead.tags && lead.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {lead.tags.map((tag, idx) => (
+                                <span 
+                                  key={`${tag}-${idx}`} 
+                                  className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700/80 border border-indigo-100/50"
+                                >
+                                  <Tag className="w-2 h-2 text-indigo-400" />
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
 
-                        {lead.notes && (
-                          <div className="text-[11px] text-slate-400 font-medium truncate max-w-[150px] mt-1" title={lead.notes}>
-                            📝 {lead.notes}
+                          {lead.notes && (
+                            <div className="text-[11px] text-slate-400 font-medium truncate max-w-[150px] mt-1" title={lead.notes}>
+                              📝 {lead.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col space-y-1">
+                            <span className="flex items-center gap-1.5 text-slate-600">
+                              <Phone className="w-3.5 h-3.5" /> {lead.phone}
+                              {lead.phoneVerified && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Phone number verified via OTP" />
+                              )}
+                              {isDuplicatePhone(lead.phone) && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Phone Number detected">
+                                  Duplicate Phone
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-slate-500 text-xs">
+                              <Mail className="w-3.5 h-3.5" /> {lead.email}
+                              {isDuplicateEmail(lead.email) && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Email Address detected">
+                                  Duplicate Email
+                                </span>
+                              )}
+                            </span>
                           </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col space-y-1">
-                          <span className="flex items-center gap-1.5 text-slate-600">
-                            <Phone className="w-3.5 h-3.5" /> {lead.phone}
-                            {lead.phoneVerified && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Phone number verified via OTP" />
-                            )}
-                            {isDuplicatePhone(lead.phone) && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Phone Number detected">
-                                Duplicate Phone
-                              </span>
-                            )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 border border-slate-200">
+                            {lead.source}
                           </span>
-                          <span className="flex items-center gap-1.5 text-slate-500 text-xs">
-                            <Mail className="w-3.5 h-3.5" /> {lead.email}
-                            {isDuplicateEmail(lead.email) && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Duplicate Email Address detected">
-                                Duplicate Email
-                              </span>
-                            )}
-                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={lead.status}
+                            onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
+                            className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 cursor-pointer ${statusColors[lead.status]}`}
+                          >
+                            <option value="New Lead">New Lead</option>
+                            <option value="Contact">Contact</option>
+                            <option value="Follow-up Required">Follow-up Required</option>
+                            <option value="Consultation Booked">Consultation Booked</option>
+                            <option value="Counseling Done">Counseling Done</option>
+                            <option value="Demo Class Booked">Demo Class Booked</option>
+                            <option value="Payment Pending">Payment Pending</option>
+                            <option value="Re-engagement Offer">Re-engagement Offer</option>
+                            <option value="Enrolled">Enrolled</option>
+                            <option value="Discarded">Discarded</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${scoreDetails.color}`}>
+                              {scoreDetails.score}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`}>
+                              {scoreDetails.level}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
+                          {format(new Date(lead.createdAt), 'MMM d, yyyy')}
+                        </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => openEditModal(lead)}
+                            className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+                            title="Edit Lead"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(lead.id)}
+                            className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Delete Lead"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-600">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 border border-slate-200">
-                          {lead.source}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={lead.status}
-                          onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
-                          className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 cursor-pointer ${statusColors[lead.status]}`}
-                        >
-                          <option value="New Lead">New Lead</option>
-                          <option value="Contact">Contact</option>
-                          <option value="Follow-up Required">Follow-up Required</option>
-                          <option value="Consultation Booked">Consultation Booked</option>
-                          <option value="Counseling Done">Counseling Done</option>
-                          <option value="Demo Class Booked">Demo Class Booked</option>
-                          <option value="Payment Pending">Payment Pending</option>
-                          <option value="Re-engagement Offer">Re-engagement Offer</option>
-                          <option value="Enrolled">Enrolled</option>
-                          <option value="Discarded">Discarded</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-bold ${scoreDetails.color}`}>
-                            {scoreDetails.score}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${scoreDetails.badgeBg} ${scoreDetails.badgeText}`}>
-                            {scoreDetails.level}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
-                        {format(new Date(lead.createdAt), 'MMM d, yyyy')}
-                      </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => openEditModal(lead)}
-                          className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
-                          title="Edit Lead"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(lead.id)}
-                          className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Delete Lead"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                    </tr>
+
+                    {/* Expandable row detail view */}
+                    {isExpanded && (
+                      <tr className="bg-slate-50/20 select-none">
+                        <td colSpan={8} className="p-0 border-b border-slate-100">
+                          <div className="px-6 py-5 bg-slate-50/40 divide-y divide-slate-100">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-5 border-none">
+                              
+                              {/* Item 1: Student IELTS & Course Profile */}
+                              <div className="space-y-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <GraduationCap className="w-4 h-4 text-indigo-500" />
+                                  Academic & Target Country
+                                </h4>
+                                <div className="bg-white border border-slate-200/70 p-4 rounded-xl space-y-2.5 shadow-3xs">
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">Target Course:</span>
+                                    <span className="font-bold text-slate-800 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">
+                                      {lead.targetCourse || 'Not Specified'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">Target Band:</span>
+                                    <span className="font-bold text-slate-800 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">
+                                      ★ {lead.targetBand || 'Any'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">Destination:</span>
+                                    <span className="font-bold text-slate-800 flex items-center gap-1">
+                                      <Globe className="w-3.5 h-3.5 text-slate-400" />
+                                      {lead.destination || 'Not Specified'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-xs border-t border-slate-100 pt-2 mt-2">
+                                    <span className="text-slate-500 font-medium">Expected Value (Budget):</span>
+                                    <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                      {lead.expectedValue ? `৳${Number(lead.expectedValue).toLocaleString()}` : 'Not Specified'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Item 2: Mock scores / Performance logs */}
+                              <div className="space-y-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <BookOpen className="w-4 h-4 text-emerald-500" />
+                                  IELTS Mock Test Scores
+                                </h4>
+                                <div className="bg-white border border-slate-200/70 p-4 rounded-xl text-xs flex flex-col justify-between shadow-3xs min-h-[135px]">
+                                  {lead.mockScores && lead.mockScores.length > 0 ? (
+                                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                                      {lead.mockScores.map((score, sIdx) => (
+                                        <div key={sIdx} className="border border-slate-100 p-2 rounded-lg space-y-1">
+                                          <div className="flex justify-between items-center">
+                                            <span className="font-bold text-slate-700">Mock Run #{sIdx + 1}</span>
+                                            <span className="text-[10px] text-slate-400">{format(new Date(score.date), 'MMM d, yyyy')}</span>
+                                          </div>
+                                          <div className="grid grid-cols-5 gap-1 text-center text-[10px] font-mono">
+                                            <div className="bg-slate-50 p-0.5 rounded leading-tight"><div className="text-[8px] text-slate-400">L</div><div className="font-bold">{score.listening}</div></div>
+                                            <div className="bg-slate-50 p-0.5 rounded leading-tight"><div className="text-[8px] text-slate-400">R</div><div className="font-bold">{score.reading}</div></div>
+                                            <div className="bg-slate-50 p-0.5 rounded leading-tight"><div className="text-[8px] text-slate-400">W</div><div className="font-bold">{score.writing}</div></div>
+                                            <div className="bg-slate-50 p-0.5 rounded leading-tight"><div className="text-[8px] text-slate-400">S</div><div className="font-bold">{score.speaking}</div></div>
+                                            <div className="bg-indigo-50 border border-indigo-100 p-0.5 rounded leading-tight text-indigo-700 font-bold"><div className="text-[8px] text-indigo-400">O</div><div>{score.overall}</div></div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-slate-400 italic">No mock exam scores recorded.</div>
+                                  )}
+                                  <button 
+                                    onClick={() => openEditModal(lead)}
+                                    className="w-full text-center border border-dashed border-emerald-200 hover:border-emerald-500 hover:bg-emerald-50 text-emerald-700 font-bold py-1 rounded-lg transition-all text-[11px] flex items-center justify-center gap-1 mt-2 cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" /> Log Scores / Edit Profile
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Item 3: Communications & Study Mode Preferences */}
+                              <div className="space-y-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Clock className="w-4 h-4 text-amber-500" />
+                                  Adviser Insights & Timeline
+                                </h4>
+                                <div className="bg-white border border-slate-200/70 p-4 rounded-xl space-y-2 text-xs shadow-3xs">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">Registration Date:</span>
+                                    <span className="font-semibold text-slate-700">{format(new Date(lead.createdAt), 'PP p')}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">Study Preferences:</span>
+                                    <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                                      {lead.preferences?.studyMode || 'Not Specified'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">Time to Start:</span>
+                                    <span className="font-semibold text-slate-700">{lead.preferences?.timeline || 'Not Specified'}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">Phone Verification:</span>
+                                    <span className={`font-bold flex items-center gap-1 ${lead.phoneVerified ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                      {lead.phoneVerified ? '✓ Verified (OTP)' : 'Unverified'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                            </div>
+
+                            {/* Save Direct Notes Interface */}
+                            <div className="pt-4 grid grid-cols-1 lg:grid-cols-4 gap-4 items-start border-t border-slate-200/50">
+                              <div className="lg:col-span-3">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <FileText className="w-4 h-4 text-slate-500" />
+                                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Direct Counselor Comments & Intake Notes</span>
+                                </div>
+                                <textarea
+                                  value={editingNotesText[lead.id] !== undefined ? editingNotesText[lead.id] : (lead.notes || '')}
+                                  onChange={(e) => {
+                                    setEditingNotesText(prev => ({
+                                      ...prev,
+                                      [lead.id]: e.target.value
+                                    }));
+                                  }}
+                                  className="w-full h-20 text-xs border border-slate-200 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 placeholder-slate-400 leading-relaxed font-sans"
+                                  placeholder="Write quick interactions, counseling logs, target university/degree requirement detail or next follow up logs..."
+                                />
+                              </div>
+                              <div className="space-y-2 lg:mt-6">
+                                <button
+                                  disabled={savingNotesId === lead.id}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const nText = editingNotesText[lead.id] !== undefined ? editingNotesText[lead.id] : (lead.notes || '');
+                                    setSavingNotesId(lead.id);
+                                    try {
+                                      const r = await fetch(`/api/leads/${lead.id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ notes: nText })
+                                      });
+                                      if (r.ok) {
+                                        const d = await r.json();
+                                        setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notes: d.lead.notes } : l));
+                                        logAuditEvent({
+                                          action: 'Lead Profile Updated',
+                                          entityType: 'lead',
+                                          entityId: lead.id,
+                                          details: `Directly updated table-expand comments/notes for student lead "${lead.name}".`
+                                        });
+                                        alert("Comments saved successfully!");
+                                      } else {
+                                        alert("Failed to save updated notes.");
+                                      }
+                                    } catch (error) {
+                                      console.error(error);
+                                      alert("Network error updating notes.");
+                                    } finally {
+                                      setSavingNotesId(null);
+                                    }
+                                  }}
+                                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer hover:scale-101 active:scale-99"
+                                >
+                                  {savingNotesId === lead.id ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      Saving...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check className="w-3.5 h-3.5" />
+                                      Save Note Changes
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => toggleLeadExpand(lead.id)}
+                                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 font-bold text-xs py-2 px-4 rounded-xl text-center cursor-pointer block"
+                                >
+                                  Collapse Panel
+                                </button>
+                              </div>
+                            </div>
+
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })
             )}

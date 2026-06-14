@@ -240,6 +240,50 @@ function getLocalItem<T>(key: string, defaultVal: T[] = []): T[] {
       localStorage.setItem(`crm_db_${key}`, JSON.stringify(initLogs));
       return initLogs as unknown as T[];
     }
+    if (key === 'campaigns') {
+      const initCamps: Campaign[] = [
+        {
+          id: 'camp_1',
+          userId: 'ielts_crm_main_user',
+          type: 'SMS',
+          audience: 'New Leads',
+          message: 'Welcome to IELTS Revolution! Your free demo class is scheduled for Monday at 4:00 PM. Reply to confirm.',
+          sentAt: Date.now() - 3600000 * 5,
+          status: 'Sent'
+        },
+        {
+          id: 'camp_2',
+          userId: 'ielts_crm_main_user',
+          type: 'SMS',
+          audience: 'Payment Pending',
+          message: 'Your enrollment fee payment link is status pending. Click here to confirm registration: https://example.com/pay',
+          sentAt: Date.now() - 3600000 * 24,
+          status: 'Failed'
+        },
+        {
+          id: 'camp_3',
+          userId: 'ielts_crm_main_user',
+          type: 'Email',
+          audience: 'All Contacts',
+          subject: 'Complete 2026 Band 8.5 Strategy E-book Inside!',
+          body: 'Greetings! Check out our exclusive IELTS preparation structures in this weekly digest.',
+          sentAt: Date.now() - 3600000 * 48,
+          status: 'Sent'
+        },
+        {
+          id: 'camp_4',
+          userId: 'ielts_crm_main_user',
+          type: 'Email',
+          audience: 'Re-engagement Offer',
+          subject: 'Special 15% discount code inside',
+          body: 'We noticed you did not schedule a consultation. Use code REENGAGE15 to get 15% off!',
+          sentAt: Date.now() - 3600000 * 72,
+          status: 'Failed'
+        }
+      ];
+      localStorage.setItem(`crm_db_${key}`, JSON.stringify(initCamps));
+      return initCamps as unknown as T[];
+    }
     return defaultVal;
   }
   try {
@@ -458,6 +502,28 @@ if (String(err).toLowerCase().includes('offline')) {
     const local = getLocalItem<Campaign>('campaigns');
     local.unshift(campaign);
     saveLocalItem('campaigns', local);
+  },
+
+  async updateCampaignStatus(campaignId: string, status: string): Promise<void> {
+    if (isFirebaseActive() && firestoreDb) {
+      try {
+        await updateDoc(doc(firestoreDb, 'campaigns', campaignId), { status });
+        return;
+      } catch (err) {
+        if (String(err).toLowerCase().includes('offline')) {
+          console.warn('[FirebaseService] Operation suppressed (offline).');
+        } else {
+          console.error('[FirebaseService] Operation failed:', err);
+        }
+        handleFirestoreError(err, OperationType.UPDATE, 'campaigns/' + campaignId);
+      }
+    }
+    const local = getLocalItem<Campaign>('campaigns');
+    const camp = local.find(c => c.id === campaignId);
+    if (camp) {
+      camp.status = status;
+      saveLocalItem('campaigns', local);
+    }
   },
 
   // --- AUDIT LOGS ---
