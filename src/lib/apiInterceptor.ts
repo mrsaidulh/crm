@@ -205,8 +205,9 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
       }
       
       if (pathname === '/api/campaigns/sms' && method === 'POST') {
+        const campaignId = uuidv4();
         const newCampaign: Campaign = {
-          id: uuidv4(),
+          id: campaignId,
           type: 'SMS',
           audience: body.audience || 'All',
           message: body.message || '',
@@ -215,14 +216,29 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
           userId: body.userId || 'ielts_crm_main_user'
         };
         await firebaseService.insertCampaign(newCampaign);
-        // Delay to simulate API cellular latency
-        await new Promise(r => setTimeout(r, 450));
-        return jsonResponse({ success: true, campaign: newCampaign });
+
+        let deliverySummary = { totalTargets: 0, sent: 0, failed: 0 };
+        try {
+          const res = await originalFetch('/api/campaigns/sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...body, id: campaignId, sentAt: newCampaign.sentAt })
+          });
+          const resData = await res.json();
+          if (resData && resData.deliverySummary) {
+            deliverySummary = resData.deliverySummary;
+          }
+        } catch (e) {
+          console.warn('[API Interceptor] Sync dispatch SMS campaign to MySQL/Express failed:', e);
+        }
+
+        return jsonResponse({ success: true, campaign: newCampaign, deliverySummary });
       }
       
       if (pathname === '/api/campaigns/email' && method === 'POST') {
+        const campaignId = uuidv4();
         const newCampaign: Campaign = {
-          id: uuidv4(),
+          id: campaignId,
           type: 'Email',
           audience: body.audience || 'All',
           subject: body.subject || '',
@@ -232,7 +248,17 @@ const interceptorFetch = async function (input: RequestInfo | URL, init?: Reques
           userId: body.userId || 'ielts_crm_main_user'
         };
         await firebaseService.insertCampaign(newCampaign);
-        await new Promise(r => setTimeout(r, 450));
+
+        try {
+          await originalFetch('/api/campaigns/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...body, id: campaignId, sentAt: newCampaign.sentAt })
+          });
+        } catch (e) {
+          console.warn('[API Interceptor] Sync dispatch Email campaign to MySQL/Express failed:', e);
+        }
+
         return jsonResponse({ success: true, campaign: newCampaign });
       }
 
