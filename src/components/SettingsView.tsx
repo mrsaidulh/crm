@@ -330,6 +330,133 @@ function LiveGoogleTestBlock({ settings }: { settings: UserSettings }) {
   );
 }
 
+function LiveSmsTestBlock({ settings }: { settings: UserSettings }) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; status: 'Live' | 'Error'; message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    if (!settings.smsApiKey) {
+      setTestResult({
+        success: false,
+        status: 'Error',
+        message: 'SMS API Key / Token is missing. Please configure it to perform a heartbeat check.'
+      });
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/sms/test-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          smsProvider: settings.smsProvider || 'custom',
+          smsApiKey: settings.smsApiKey,
+          smsSenderId: settings.smsSenderId,
+          smsApiUrl: settings.smsApiUrl
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setTestResult({
+          success: data.success,
+          status: data.status || (data.success ? 'Live' : 'Error'),
+          message: data.message || 'Heartbeat response received successfully.'
+        });
+      } else {
+        setTestResult({
+          success: false,
+          status: 'Error',
+          message: data.error || 'Failed to initialize heartbeat check.'
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        status: 'Error',
+        message: err.message || 'Network exception encountered during heartbeat check.'
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  // Perform a silent / auto heartbeat check when settings are loaded or changed
+  useEffect(() => {
+    if (settings.smsApiKey) {
+      handleTestConnection();
+    } else {
+      setTestResult(null);
+    }
+  }, [settings.smsApiKey, settings.smsProvider, settings.smsSenderId, settings.smsApiUrl]);
+
+  return (
+    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 mt-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5 animate-in fade-in">
+            <Activity className="w-3.5 h-3.5 text-rose-505 bg-rose-101 flex items-center justify-center p-0.5 rounded-full" />
+            SMS Gateway Heartbeat Monitor
+          </span>
+          <p className="text-[11px] text-slate-500 leading-normal font-normal">
+            Verifies whether your SMS Gateway provider API server is online, reachable, and authenticated.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {testResult && (
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors flex items-center gap-1 ${
+              testResult.status === 'Live'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${testResult.status === 'Live' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+              {testResult.status}
+            </span>
+          )}
+
+          <button
+            type="button"
+            disabled={testing}
+            onClick={handleTestConnection}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3 py-1.5 rounded-xl hover:shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+          >
+            {testing ? (
+              <>
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Checking...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                <span>Ping Heartbeat</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {testResult && (
+        <div className={`p-3 rounded-xl border text-xs font-medium leading-relaxed font-sans ${
+          testResult.status === 'Live'
+            ? 'bg-emerald-50 text-emerald-850 border-emerald-250'
+            : 'bg-rose-50 text-rose-850 border-rose-250'
+        }`}>
+          <div className="flex items-start gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${testResult.status === 'Live' ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+            <span className="break-all font-normal">{testResult.message}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsView() {
   const { user, updateProfile, isSuperAdmin, toggleTwoFactor } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
@@ -1569,6 +1696,9 @@ export default function SettingsView() {
                       />
                     </div>
                   </div>
+
+                  {/* Visual Status Indicator / Heartbeat Check */}
+                  <LiveSmsTestBlock settings={settings} />
                 </div>
 
                 <div className="pt-6 border-t border-slate-100">

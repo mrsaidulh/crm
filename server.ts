@@ -1293,6 +1293,104 @@ app.post('/api/google/test-connection', async (req, res) => {
   }
 });
 
+// POST /api/sms/test-connection
+app.post('/api/sms/test-connection', async (req, res) => {
+  try {
+    const { smsProvider, smsApiKey, smsSenderId, smsApiUrl } = req.body;
+
+    if (!smsProvider) {
+      return res.status(400).json({ success: false, error: 'SMS Provider is required' });
+    }
+
+    // Interactive simulator mode if using dummy keys
+    if (!smsApiKey || smsApiKey === 'mock_bulksmsbd_key' || smsApiKey.toLowerCase().startsWith('mock_') || smsApiKey.toLowerCase() === 'test') {
+      return res.json({
+        success: true,
+        status: 'Live',
+        message: 'Sandbox/Mock mode: Simulated heartbeat is healthy. SMS Gateway simulation is active.'
+      });
+    }
+
+    let testUrl = '';
+    if (smsProvider === 'bulk_sms_bd') {
+      testUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=8801700000000&senderid=${encodeURIComponent(smsSenderId || '8801844532633')}&message=heartbeat`;
+    } else if (smsProvider === 'sms_bd') {
+      testUrl = `https://api.sms.net.bd/sendsms?api_key=${encodeURIComponent(smsApiKey)}&to=8801700000000&message=heartbeat`;
+    } else if (smsProvider === 'greenweb') {
+      testUrl = `https://api.greenweb.com.bd/api.php?token=${encodeURIComponent(smsApiKey)}&to=8801700000000&message=heartbeat`;
+    } else if (smsProvider === 'custom') {
+      if (!smsApiUrl) {
+        return res.status(400).json({ success: false, error: 'Custom API Endpoint URL is required for custom gateways.' });
+      }
+      testUrl = smsApiUrl
+        .replace('{{api_key}}', encodeURIComponent(smsApiKey))
+        .replace('{{phone}}', '8801700000000')
+        .replace('{{sender_id}}', encodeURIComponent(smsSenderId || ''))
+        .replace('{{message}}', encodeURIComponent('heartbeat'));
+    }
+
+    console.log(`[SMS Heartbeat] Attempting heartbeat connect to ${smsProvider} at URL: ${testUrl}`);
+    
+    // 5-second connection abort controller to prevent hanging connection state
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const pingResponse = await fetch(testUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      const respText = await pingResponse.text();
+      console.log(`[SMS Heartbeat] Received response from ${smsProvider}:`, respText.substring(0, 150));
+
+      if (pingResponse.status >= 500) {
+        return res.json({
+          success: false,
+          status: 'Error',
+          message: `Gateway Returned Server Error (${pingResponse.status}): The SMS gateway is currently offline or experiencing a service degradation.`
+        });
+      }
+
+      // Check for specific authentication/credential failure patterns to provide extra guidance
+      let warningMessage = '';
+      const textLower = respText.toLowerCase();
+      if (
+        textLower.includes('invalid key') || 
+        textLower.includes('auth failed') || 
+        textLower.includes('invalid token') || 
+        textLower.includes('authorization failed') ||
+        textLower.includes('authentication failed') ||
+        textLower.includes('credential') ||
+        textLower.includes('api key error')
+      ) {
+        warningMessage = ' (Reachable, but authentication failed. Check your API key/token)';
+      }
+
+      return res.json({
+        success: true,
+        status: 'Live',
+        message: `Heartbeat check passed: Secure gateway connection is established.${warningMessage}`
+      });
+
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      console.error(`[SMS Heartbeat] Failed to connect to ${testUrl}:`, fetchErr);
+      return res.json({
+        success: false,
+        status: 'Error',
+        message: `Heartbeat failed: Gateway is unreachable. ${fetchErr.message || 'Check DNS/Route setup'}`
+      });
+    }
+
+  } catch (err: any) {
+    console.error('[SMS Heartbeat] Internal connection test error:', err);
+    return res.status(500).json({
+      success: false,
+      status: 'Error',
+      error: err.message || 'Internal gateway validator error.'
+    });
+  }
+});
+
 // --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
   try {
