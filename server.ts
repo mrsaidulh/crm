@@ -302,13 +302,26 @@ app.use(async (req, res, next) => {
 // --- API ROUTES ---
 
 // Helper function to send actual SMS
-async function sendActualSms(phone: string, smsMessage: string, userId: string): Promise<{ success: boolean; provider: string; status: 'Sent' | 'Failed'; errorDetails?: string }> {
+async function sendActualSms(phone: string, smsMessage: string, userId: string): Promise<{ success: boolean; provider: string; status: 'Sent' | 'Failed' | 'Delivered' | 'Pending'; errorDetails?: string }> {
+  console.log(`[SMS Validation] Starting request validation for recipient(s): "${phone}". Message length: ${smsMessage ? smsMessage.length : 0} chars.`);
+  
+  // 1. Initial Request Validation
+  if (!phone || typeof phone !== 'string' || phone.trim() === '') {
+    console.error(`[SMS Validation Error] Rejected: Phone number parameter is blank or invalid.`);
+    return { success: false, provider: 'Unknown', status: 'Failed', errorDetails: 'Validation Error: Phone number is empty' };
+  }
+
+  if (!smsMessage || typeof smsMessage !== 'string' || smsMessage.trim() === '') {
+    console.error(`[SMS Validation Error] Rejected: Message body parameter is blank or empty.`);
+    return { success: false, provider: 'Unknown', status: 'Failed', errorDetails: 'Validation Error: Message content is empty' };
+  }
+
   let smsApiKey = '';
   let smsSenderId = '8801844532633'; // approved or default sender ID
   let smsProvider = 'bulk_sms_bd';
   let smsApiUrl = '';
 
-  // 1. Try to fetch dynamic settings from the database first
+  // Try to fetch dynamic settings from the database first
   try {
     let dbSettings = await dbService.getSettings(userId);
     if (!dbSettings || !dbSettings.smsApiKey) {
@@ -319,17 +332,20 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
       smsSenderId = dbSettings.smsSenderId || smsSenderId;
       smsProvider = dbSettings.smsProvider || 'bulk_sms_bd';
       smsApiUrl = dbSettings.smsApiUrl || '';
-      console.log(`[SMS Server] Loaded dynamic gateway settings from database. Provider: ${smsProvider}, SenderId: ${smsSenderId}`);
+      console.log(`[SMS Server Config] Retrieved gateway settings from DB. Provider: "${smsProvider}", Sender ID: "${smsSenderId}"`);
+    } else {
+      console.warn(`[SMS Server Config] No active database configuration found for user "${userId}".`);
     }
   } catch (dbErr) {
-    console.warn('[SMS Server] Error fetching database settings:', dbErr);
+    console.warn('[SMS Server Config Error] Error fetching gateway configurations:', dbErr);
   }
 
-  // 2. Fall back to Environment variables if no database settings exist or if overridden
+  // Fall back to Environment variables if no database settings exist or if overridden
   if (!smsApiKey && process.env.BULKSMSBD_API_KEY && process.env.BULKSMSBD_API_KEY !== 'mock_bulksmsbd_key') {
     smsApiKey = process.env.BULKSMSBD_API_KEY;
     smsSenderId = process.env.BULKSMSBD_SENDER_ID || smsSenderId;
     smsProvider = 'bulk_sms_bd';
+    console.log('[SMS Server Config] Falling back to default ENVIRONMENT credentials for BulkSMSBD.');
   }
 
   // Normalize Bangladesh phone formatting to start with 880 (e.g. 8801712327286)
@@ -347,6 +363,18 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
 
   const cleanedPhone = normalizedParts.join(',');
 
+  if (normalizedParts.length === 0) {
+    console.error(`[SMS Validation Error] Rejected: Phone number formatting contains no valid numeric digits. Original: "${phone}".`);
+    return { success: false, provider: smsProvider, status: 'Failed', errorDetails: 'Validation Error: No valid phone numbers after normalization' };
+  }
+
+  // Mask sensitive key for secure diagnostic logging (e.g. "5G5C*******UWs")
+  const maskedKey = smsApiKey 
+    ? (smsApiKey.length > 8 ? `${smsApiKey.substring(0, 4)}*******${smsApiKey.substring(smsApiKey.length - 4)}` : '***') 
+    : 'None';
+
+  console.log(`[SMS Dispatch Info] Targets to send: ${normalizedParts.length} numbers [${cleanedPhone}]. Using Masked Key: ${maskedKey}. Provider: "${smsProvider}".`);
+
   // 3. Dispatch the message if a valid API Key exists
   if (smsApiKey && smsApiKey !== 'mock_bulksmsbd_key') {
     try {
@@ -357,12 +385,17 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
         let lastError = '';
         for (const p of normalizedParts) {
           const resSingle = await sendActualSms(p, smsMessage, userId);
-          if (!resSingle.success) {
+          if (resSingle.status !== 'Delivered' && resSingle.status !== 'Sent') {
             overallSuccess = false;
             lastError = resSingle.errorDetails || 'Failed';
           }
         }
-        return { success: overallSuccess, provider: smsProvider, status: overallSuccess ? 'Sent' : 'Failed', errorDetails: lastError || undefined };
+        return { 
+          success: overallSuccess, 
+          provider: smsProvider, 
+          status: overallSuccess ? 'Delivered' : 'Failed', 
+          errorDetails: lastError || undefined 
+        };
       }
 
       let finalApiUrl = '';
@@ -387,24 +420,82 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
         }
       }
 
-      console.log(`[SMS Server] Dispatching dynamic request to: ${smsProvider} API for phone: ${cleanedPhone}`);
+      console.log(`[SMS HTTP Request] Dispatching HTTP GET to: "${smsProvider}" Gateway`);
+      
       const response = await fetch(finalApiUrl);
       const data = await response.text();
-      console.log(`[SMS Server] API response from ${smsProvider}:`, data);
+      
+      console.log(`[SMS HTTP Response] Remote server returned HTTP ${response.status}. Body:`, data);
 
-      let logStatus: 'Sent' | 'Failed' = 'Sent';
+      let logStatus: 'Sent' | 'Failed' | 'Delivered' | 'Pending' = 'Delivered';
       let errorDetails: string | undefined = undefined;
 
       if (!response.ok) {
         logStatus = 'Failed';
-        errorDetails = `HTTP Status: ${response.status}`;
+        errorDetails = `HTTP Response Error: status ${response.status} (${response.statusText})`;
       } else {
-        const lowerData = data.toLowerCase();
-        if (lowerData.includes('error') || lowerData.includes('invalid') || lowerData.includes('failed') || lowerData.includes('auth')) {
-          logStatus = 'Failed';
-          errorDetails = data.substring(0, 250);
+        // Attempt parsing as JSON to safely examine structure
+        try {
+          const parsed = JSON.parse(data);
+          
+          if (smsProvider === 'bulk_sms_bd') {
+            // BulkSMSBD structure: {"response_code": 200, "success_message": "SMS Submitted Successfully", "error_message": null}
+            const code = parsed.response_code;
+            const errMsg = parsed.error_message;
+            
+            if (code === 200 || code === '200') {
+              logStatus = 'Delivered';
+              errorDetails = parsed.success_message || 'SMS Submitted Successfully to bulk_sms_bd.';
+            } else {
+              logStatus = 'Failed';
+              errorDetails = errMsg || parsed.success_message || `Response Code: ${code}`;
+            }
+          } else if (smsProvider === 'sms_bd') {
+            if (parsed.success === true || parsed.status === 'success' || parsed.response_code === 200) {
+              logStatus = 'Delivered';
+            } else {
+              logStatus = 'Failed';
+              errorDetails = parsed.message || parsed.error || JSON.stringify(parsed);
+            }
+          } else if (smsProvider === 'greenweb') {
+            if (data.includes('Ok:') || data.includes('Success') || parsed.status === 'success') {
+              logStatus = 'Delivered';
+            } else {
+              logStatus = 'Failed';
+              errorDetails = data;
+            }
+          } else {
+            // Default generic JSON parsing
+            if (parsed.error || parsed.err || parsed.status === 'error' || parsed.success === false) {
+              logStatus = 'Failed';
+              errorDetails = parsed.error || parsed.message || JSON.stringify(parsed);
+            } else {
+              logStatus = 'Delivered';
+            }
+          }
+        } catch (jsonErr) {
+          // Non-JSON plaintext parsing fallback
+          const lowerData = data.toLowerCase();
+          
+          // Verify if it contains error indicators, but bypass falsy matches such as "error_message":null or "error":null
+          const hasRealError = 
+            (lowerData.includes('error') && !lowerData.includes('error_message":null') && !lowerData.includes('error":null')) ||
+            lowerData.includes('invalid') || 
+            lowerData.includes('failed') || 
+            lowerData.includes('unauthorized') || 
+            lowerData.includes('auth');
+
+          if (hasRealError) {
+            logStatus = 'Failed';
+            errorDetails = data.substring(0, 250);
+          } else {
+            logStatus = 'Delivered';
+            errorDetails = `Plaintext reply verified: ${data.substring(0, 100)}`;
+          }
         }
       }
+
+      console.log(`[SMS Log Persistence] Saving Log. Phone: ${cleanedPhone}, Status: ${logStatus}. Error Details: ${errorDetails || 'None'}`);
 
       await dbService.insertSmsLog({
         id: `sms_${uuidv4().substring(0, 8)}`,
@@ -415,12 +506,13 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
         status: logStatus,
         errorDetails,
         sentAt: Date.now()
-      }).catch(e => console.error('[SMS Log Error]', e));
+      }).catch(e => console.error('[SMS Log Persistence Error]', e));
 
-      return { success: logStatus === 'Sent', provider: smsProvider, status: logStatus, errorDetails };
+      return { success: logStatus === 'Delivered', provider: smsProvider, status: logStatus, errorDetails };
     } catch (smsError: any) {
-      console.error(`[SMS Server] Failed to dispatch SMS via ${smsProvider}:`, smsError);
+      console.error(`[SMS Server Exception] Failed to dispatch over network via ${smsProvider}:`, smsError);
       const errorStr = smsError.message || String(smsError);
+      
       await dbService.insertSmsLog({
         id: `sms_${uuidv4().substring(0, 8)}`,
         userId: userId,
@@ -428,26 +520,28 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
         message: smsMessage,
         provider: smsProvider,
         status: 'Failed',
-        errorDetails: errorStr,
+        errorDetails: `Network/HTTP Exception: ${errorStr}`,
         sentAt: Date.now()
-      }).catch(e => console.error('[SMS Log Error]', e));
+      }).catch(e => console.error('[SMS Log Persistence Error]', e));
 
       return { success: false, provider: smsProvider, status: 'Failed', errorDetails: errorStr };
     }
   }
 
   // Fallback to simulation print
-  console.log(`[SMS Simulation] Message to ${phone}: ${smsMessage}`);
+  console.log(`[SMS Simulation Sandbox] Target: ${phone}, Content: "${smsMessage}"`);
+  const simulationStatus = 'Delivered'; // Sandbox delivers immediately
+  
   await dbService.insertSmsLog({
     id: `sms_${uuidv4().substring(0, 8)}`,
     userId: userId,
     phone: phone,
     message: smsMessage,
     provider: 'Simulation',
-    status: 'Sent',
+    status: simulationStatus,
     errorDetails: 'Development Sandbox. Gateway Simulation.',
     sentAt: Date.now()
-  }).catch(e => console.error('[SMS Log Error]', e));
+  }).catch(e => console.error('[SMS Log Persistence Error]', e));
 
   return { success: true, provider: 'Simulation', status: 'Sent', errorDetails: 'Simulation Sandbox' };
 }

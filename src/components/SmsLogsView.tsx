@@ -128,7 +128,8 @@ export default function SmsLogsView() {
 
   // Calculate statistics
   const totalCount = logs.length;
-  const sentCount = logs.filter(l => l.status === 'Sent').length;
+  const sentCount = logs.filter(l => l.status === 'Sent' || l.status === 'Delivered').length;
+  const pendingCount = logs.filter(l => l.status === 'Pending').length;
   const failedCount = logs.filter(l => l.status === 'Failed').length;
   const successRate = totalCount > 0 ? Math.round((sentCount / totalCount) * 100) : 100;
   const simulationCount = logs.filter(l => l.provider === 'Simulation').length;
@@ -261,7 +262,9 @@ export default function SmsLogsView() {
             className="bg-white text-slate-700 text-sm border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium cursor-pointer"
           >
             <option value="All">All Statuses</option>
+            <option value="Delivered">Delivered</option>
             <option value="Sent">Sent</option>
+            <option value="Pending">Pending</option>
             <option value="Failed">Failed</option>
           </select>
         </div>
@@ -328,14 +331,24 @@ export default function SmsLogsView() {
                           {log.message}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {log.status === 'Sent' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-55 animate-pulse" />
+                          {log.status === 'Delivered' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 animate-fade-in">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Delivered
+                            </span>
+                          ) : log.status === 'Sent' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               Sent
+                            </span>
+                          ) : log.status === 'Pending' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Pending
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-55" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                               Failed
                             </span>
                           )}
@@ -385,14 +398,16 @@ export default function SmsLogsView() {
                                   <AlertCircle className="w-3.5 h-3.5 text-slate-400" /> Gateway Logs & Diagnostics
                                 </h4>
                                 <div className={`mt-1.5 text-sm p-3 rounded-lg border leading-tight font-mono ${
-                                  log.status === 'Sent' 
-                                    ? 'bg-emerald-50/30 border-emerald-100 text-slate-700' 
-                                    : 'bg-red-50/10 border-red-100 text-red-700'
+                                  log.status === 'Failed' 
+                                    ? 'bg-red-50/10 border-red-100 text-red-700' 
+                                    : log.status === 'Pending'
+                                      ? 'bg-amber-50/10 border-amber-100 text-amber-700'
+                                      : 'bg-emerald-50/30 border-emerald-100 text-slate-700'
                                 }`}>
-                                  {log.status === 'Sent' ? (
+                                  {log.status !== 'Failed' ? (
                                     <span>
-                                      Status OK. Remote provider received instruction payload.
-                                      {log.errorDetails && <div className="mt-2 text-xs text-slate-500">Response Data: {log.errorDetails}</div>}
+                                      Status OK. Remote provider received instruction payload. Received status: "{log.status}".
+                                      {log.errorDetails && <div className="mt-2 text-xs text-slate-500">Response / Detail logs: {log.errorDetails}</div>}
                                     </span>
                                   ) : (
                                     <span className="block">
