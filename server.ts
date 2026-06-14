@@ -333,20 +333,42 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
   }
 
   // Normalize Bangladesh phone formatting to start with 880 (e.g. 8801712327286)
-  let cleanedPhone = phone.replace(/[^0-9]/g, '');
-  if (cleanedPhone.startsWith('01') && cleanedPhone.length === 11) {
-    cleanedPhone = '88' + cleanedPhone;
-  } else if (cleanedPhone.startsWith('1') && cleanedPhone.length === 10) {
-    cleanedPhone = '880' + cleanedPhone;
-  }
+  // Split phone string by comma to support multiple numbers (One-to-Many campaign)
+  const phoneParts = phone.split(',').map(p => p.trim()).filter(Boolean);
+  const normalizedParts = phoneParts.map(part => {
+    let clean = part.replace(/[^0-9]/g, '');
+    if (clean.startsWith('01') && clean.length === 11) {
+      clean = '88' + clean;
+    } else if (clean.startsWith('1') && clean.length === 10) {
+      clean = '880' + clean;
+    }
+    return clean;
+  }).filter(Boolean);
+
+  const cleanedPhone = normalizedParts.join(',');
 
   // 3. Dispatch the message if a valid API Key exists
   if (smsApiKey && smsApiKey !== 'mock_bulksmsbd_key') {
     try {
+      if (smsProvider !== 'bulk_sms_bd' && normalizedParts.length > 1) {
+        // Fallback: Send sequentially for non-BulkSMSBD gateways that don't support native bulk strings
+        console.log(`[SMS Server] Sequential bulk dispatch for ${smsProvider} for ${normalizedParts.length} numbers`);
+        let overallSuccess = true;
+        let lastError = '';
+        for (const p of normalizedParts) {
+          const resSingle = await sendActualSms(p, smsMessage, userId);
+          if (!resSingle.success) {
+            overallSuccess = false;
+            lastError = resSingle.errorDetails || 'Failed';
+          }
+        }
+        return { success: overallSuccess, provider: smsProvider, status: overallSuccess ? 'Sent' : 'Failed', errorDetails: lastError || undefined };
+      }
+
       let finalApiUrl = '';
 
       if (smsProvider === 'bulk_sms_bd') {
-        finalApiUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(smsSenderId)}&message=${encodeURIComponent(smsMessage)}`;
+        finalApiUrl = `https://bulksmsbd.net/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=${encodeURIComponent(cleanedPhone)}&senderid=${encodeURIComponent(smsSenderId)}&message=${encodeURIComponent(smsMessage)}`;
       } else if (smsProvider === 'sms_bd') {
         finalApiUrl = `https://sms.bd/api/v1/send?api_key=${encodeURIComponent(smsApiKey)}&phone=${encodeURIComponent(cleanedPhone)}&message=${encodeURIComponent(smsMessage)}`;
       } else if (smsProvider === 'greenweb') {
@@ -468,7 +490,7 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 });
 
 // POST /api/otp/verify (also aliased on root /otp/verify)
-app.post(['/api/otp/verify', '/otp/verify'], (req, res) => {
+app.post(['/api/otp/verify', '/otp/verify'], async (req, res) => {
   const { phone, code } = req.body;
 
   if (!phone || !code) {
@@ -492,7 +514,66 @@ app.post(['/api/otp/verify', '/otp/verify'], (req, res) => {
 
   // Verification successful
   activeOtps.delete(phone);
+
+  // Find and update matching leads in database
+  try {
+    const list = await dbService.getLeads('ielts_crm_main_user');
+    let targetClean = phone.replace(/[^0-9]/g, '');
+    if (targetClean.startsWith('01') && targetClean.length === 11) {
+      targetClean = '88' + targetClean;
+    } else if (targetClean.startsWith('1') && targetClean.length === 10) {
+      targetClean = '880' + targetClean;
+    }
+
+    for (const lead of list) {
+      let leadClean = lead.phone ? lead.phone.replace(/[^0-9]/g, '') : '';
+      if (leadClean.startsWith('01') && leadClean.length === 11) {
+        leadClean = '88' + leadClean;
+      } else if (leadClean.startsWith('1') && leadClean.length === 10) {
+        leadClean = '880' + leadClean;
+      }
+      if (leadClean === targetClean || lead.phone === phone) {
+        await dbService.updateLead(lead.id, { phoneVerified: true });
+        console.log(`[OTP] Marked lead ${lead.id} (${lead.name}) as phoneVerified: true`);
+      }
+    }
+  } catch (dbErr) {
+    console.warn('[OTP] Failed to update lead phoneVerified status in DB:', dbErr);
+  }
+
   return res.json({ success: true, message: 'Phone number verified successfully' });
+});
+
+// POST /api/sms/send - Exposes direct SMS sending to external CRM and API integrations
+app.post(['/api/sms/send', '/sms/send'], async (req, res) => {
+  try {
+    const { phone, message, userId } = req.body;
+    
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Phone number and message are required' });
+    }
+
+    const targetUserId = userId || 'ielts_crm_main_user';
+    console.log(`[SMS API Send] Request received for phone: ${phone}, message length: ${message.length}`);
+    const result = await sendActualSms(phone, message, targetUserId);
+
+    if (result.success) {
+      return res.json({ 
+        success: true, 
+        message: 'SMS sent successfully', 
+        provider: result.provider,
+        status: result.status
+      });
+    } else {
+      return res.status(500).json({ 
+        success: false, 
+        error: result.errorDetails || 'Failed to send SMS' 
+      });
+    }
+  } catch (err: any) {
+    console.error('[SMS API Send Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error while sending SMS' });
+  }
 });
 
 // POST /api/automation/trigger-webhook
@@ -817,25 +898,51 @@ app.post('/api/campaigns/sms', async (req, res) => {
 
     console.log(`[SMS Campaign] Dispatching broadcast to ${recipients.length} recipients for segment "${audience}"`);
 
-    // 2. Dispatch to each recipient concurrently
+    // 2. Dispatch to each recipient (optimizing for bulk_sms_bd with native One-to-Many)
     let sentCount = 0;
     let failedCount = 0;
 
     if (recipients.length > 0) {
-      const dispatchPromises = recipients.map(async (phone) => {
+      let smsProvider = 'bulk_sms_bd';
+      try {
+        const dbSettings = (await dbService.getSettings(targetUserId)) || (await dbService.getAnyActiveSmsSettings());
+        if (dbSettings && dbSettings.smsProvider) {
+          smsProvider = dbSettings.smsProvider;
+        }
+      } catch (e) {
+        // fallback
+      }
+
+      if (smsProvider === 'bulk_sms_bd') {
+        const bulkPhoneStr = recipients.join(',');
+        console.log(`[SMS Campaign] Optimizing with bulk_sms_bd native One-to-Many API for ${recipients.length} numbers.`);
         try {
-          const runResult = await sendActualSms(phone, message, targetUserId);
+          const runResult = await sendActualSms(bulkPhoneStr, message, targetUserId);
           if (runResult.success) {
-            sentCount++;
+            sentCount = recipients.length;
           } else {
-            failedCount++;
+            failedCount = recipients.length;
           }
         } catch (dispatchErr) {
-          console.error(`[SMS Campaign Error] Failed to send to ${phone}:`, dispatchErr);
-          failedCount++;
+          console.error('[SMS Campaign Bulk Error] Failed sending bulk payload:', dispatchErr);
+          failedCount = recipients.length;
         }
-      });
-      await Promise.allSettled(dispatchPromises);
+      } else {
+        const dispatchPromises = recipients.map(async (phone) => {
+          try {
+            const runResult = await sendActualSms(phone, message, targetUserId);
+            if (runResult.success) {
+              sentCount++;
+            } else {
+              failedCount++;
+            }
+          } catch (dispatchErr) {
+            console.error(`[SMS Campaign Error] Failed to send to ${phone}:`, dispatchErr);
+            failedCount++;
+          }
+        });
+        await Promise.allSettled(dispatchPromises);
+      }
     }
 
     // 3. Save Campaign execution logs
@@ -1467,7 +1574,7 @@ app.post('/api/sms/test-connection', async (req, res) => {
 
     let testUrl = '';
     if (smsProvider === 'bulk_sms_bd') {
-      testUrl = `http://bulksmsbd.com/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=8801700000000&senderid=${encodeURIComponent(smsSenderId || '8801844532633')}&message=heartbeat`;
+      testUrl = `https://bulksmsbd.net/api/smsapi?api_key=${encodeURIComponent(smsApiKey)}&type=text&number=8801700000000&senderid=${encodeURIComponent(smsSenderId || '8801844532633')}&message=heartbeat`;
     } else if (smsProvider === 'sms_bd') {
       testUrl = `https://api.sms.net.bd/sendsms?api_key=${encodeURIComponent(smsApiKey)}&to=8801700000000&message=heartbeat`;
     } else if (smsProvider === 'greenweb') {
