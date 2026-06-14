@@ -461,6 +461,7 @@ export default function SettingsView() {
   const { user, updateProfile, isSuperAdmin, toggleTwoFactor } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [settings, setSettings] = useState<UserSettings>({});
+  const [serverIp, setServerIp] = useState<string>('');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -838,6 +839,15 @@ export default function SettingsView() {
         if (responseSettings.ok) {
           const resYaml = await responseSettings.json();
           if (resYaml.settings) setSettings(resYaml.settings);
+        }
+        try {
+          const resIp = await fetch('/api/system/public-ip');
+          if (resIp.ok) {
+            const ipData = await resIp.json();
+            if (ipData.ip) setServerIp(ipData.ip);
+          }
+        } catch (ipErr) {
+          console.warn('Could not load outbound public server IP', ipErr);
         }
         await fetchTeamData();
       } catch (e) {
@@ -1663,14 +1673,34 @@ export default function SettingsView() {
                         <p className="text-xs text-slate-400 mt-1">Use placeholders <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px]">{"{{api_key}}"}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px]">{"{{phone}}"}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px]">{"{{message}}"}</code>, or <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px]">{"{{sender_id}}"}</code></p>
                       </div>
                     ) : (
-                      <div className="md:col-span-2 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <p className="text-xs font-semibold text-emerald-850 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          Preconfigured Gateway Selected
-                        </p>
-                        <p className="text-xs text-slate-600 mt-1">
-                          The API Endpoint URL is preloaded automatically for <strong className="font-extrabold text-slate-700">{settings.smsProvider === 'bulk_sms_bd' ? 'Bulk SMS BD' : settings.smsProvider === 'sms_bd' ? 'sms.bd API' : 'GreenWeb SMS'}</strong>. Only API Key and Sender ID are required below.
-                        </p>
+                      <div className="md:col-span-2 space-y-3">
+                        <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+                          <p className="text-xs font-semibold text-emerald-850 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Preconfigured Gateway Selected
+                          </p>
+                          <p className="text-xs text-slate-600 mt-1">
+                            The API Endpoint URL is preloaded automatically for <strong className="font-extrabold text-slate-700">{settings.smsProvider === 'bulk_sms_bd' ? 'Bulk SMS BD' : settings.smsProvider === 'sms_bd' ? 'sms.bd API' : 'GreenWeb SMS'}</strong>. Only API Key and Sender ID are required below.
+                          </p>
+                        </div>
+                        
+                        {settings.smsProvider === 'bulk_sms_bd' && (
+                          <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 animate-in slide-in-from-top-1">
+                            <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                              Action Required: Bulk SMS BD IP Whitelisting Error
+                            </p>
+                            <p className="text-xs text-slate-700 leading-normal">
+                              Bulk SMS BD enforces IP security. If you receive <strong>"Your ip is not Whitelisted"</strong> dispatch failures, please follow these steps:
+                            </p>
+                            <ol className="text-xs text-slate-600 list-decimal list-inside space-y-1 pl-1">
+                              <li>Log in to your <strong>Bulk SMS BD</strong> panel developer dashboard at <a href="https://bulksmsbd.net" target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 underline font-semibold">bulksmsbd.net</a></li>
+                              <li>Go to your <strong>Developer API Profile / IP Settings (Phonebook)</strong></li>
+                              <li>Authorize this CRM outbound public IP address: <strong className="font-mono bg-white px-2 py-0.5 rounded text-indigo-700 border border-indigo-200 select-all ml-1 text-xs">{serverIp || '34.34.233.5'}</strong></li>
+                              <li>Save changes and retry sending. Heartbeat should turn green!</li>
+                            </ol>
+                          </div>
+                        )}
                       </div>
                     )}
 

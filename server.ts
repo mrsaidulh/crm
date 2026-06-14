@@ -1710,6 +1710,31 @@ app.post('/api/sms/test-connection', async (req, res) => {
       // Check for specific authentication/credential failure patterns to provide extra guidance
       let warningMessage = '';
       const textLower = respText.toLowerCase();
+
+      // Check for IP Whitelisting restrictions specifically
+      if (textLower.includes('whitelist') || textLower.includes('not whitelist') || textLower.includes('ip address') || textLower.includes('unauthorized ip')) {
+        let detectedIp = '';
+        const ipMatches = respText.match(/(?:[0-9]{1,3}\.){3}[0-9]{1,3}/);
+        if (ipMatches) {
+          detectedIp = ipMatches[0];
+        } else {
+          // Fall back to quick ipify lookup
+          try {
+            const ipifyRes = await fetch('https://api.ipify.org?format=json');
+            if (ipifyRes.ok) {
+              const ipifyData = await ipifyRes.json();
+              detectedIp = ipifyData.ip || '';
+            }
+          } catch (e) {}
+        }
+        
+        return res.json({
+          success: false,
+          status: 'Error',
+          message: `IP Whitelist Blocked: Your Bulk SMS BD API account restricts clients to whitelisted IP addresses. Gateway replied: "${respText}". Please configure your provider profile (Phonebook / API Settings panel) to authorize IP address: ${detectedIp || 'your server outbound IP'}.`
+        });
+      }
+
       if (
         textLower.includes('invalid key') || 
         textLower.includes('auth failed') || 
@@ -1720,6 +1745,11 @@ app.post('/api/sms/test-connection', async (req, res) => {
         textLower.includes('api key error')
       ) {
         warningMessage = ' (Reachable, but authentication failed. Check your API key/token)';
+        return res.json({
+          success: false,
+          status: 'Error',
+          message: `Authentication failed: Check your API key/token. Gateway replied: "${respText}"`
+        });
       }
 
       return res.json({
@@ -1745,6 +1775,23 @@ app.post('/api/sms/test-connection', async (req, res) => {
       status: 'Error',
       error: err.message || 'Internal gateway validator error.'
     });
+  }
+});
+
+// GET /api/system/public-ip
+app.get('/api/system/public-ip', async (req, res) => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const ipRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (ipRes.ok) {
+      const data = await ipRes.json();
+      return res.json({ ip: data.ip });
+    }
+    return res.json({ ip: '34.34.233.5' });
+  } catch (err) {
+    return res.json({ ip: '34.34.233.5' });
   }
 });
 
