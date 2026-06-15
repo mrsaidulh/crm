@@ -1108,7 +1108,7 @@ export default function PublicForm() {
                     className={getInputStyles("targetCourse")}
                   >
                     <option value="">Select Course</option>
-                    <option value="IELTS Academic">IELTS Academic</option>
+                    <option value="IELTS Revolution">IELTS Revolution</option>
                     <option value="IELTS GT">IELTS GT</option>
                     <option value="IELTS UKVI">IELTS UKVI</option>
                     <option value="IELTS Life Skills">IELTS Life Skills</option>

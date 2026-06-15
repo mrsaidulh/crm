@@ -3118,7 +3118,7 @@ async function verifyOtpAndSubmitLead(leadData, otpCode) {
         name: leadData.name,
         email: leadData.email,
         phone: leadData.phone,
-        targetCourse: leadData.targetCourse || 'IELTS Academic',
+        targetCourse: leadData.targetCourse || 'IELTS Revolution',
         targetBand: leadData.targetBand || '7.5',
         destination: leadData.destination || 'United Kingdom',
         source: 'External Landing Form',

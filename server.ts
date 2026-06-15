@@ -133,7 +133,7 @@ async function triggerMetaConversionEvent(
             lead_id: lead.id,
             status: lead.status || 'New Lead',
             source: lead.source || 'Direct',
-            course: lead.targetCourse || 'IELTS Academic',
+            course: lead.targetCourse || 'IELTS Revolution',
             ...customData
           },
           ...(metaTestEventCode ? { test_event_code: metaTestEventCode } : {})
@@ -192,7 +192,7 @@ async function triggerGoogleConversionEvent(
               lead_id: lead.id,
               status: lead.status || 'New Lead',
               source: lead.source || 'Direct',
-              course: lead.targetCourse || 'IELTS Academic',
+              course: lead.targetCourse || 'IELTS Revolution',
               engagement_time_msec: 100,
               user_email_hashed: hashSHA256(lead.email),
               user_phone_hashed: hashPhone(lead.phone),
@@ -765,7 +765,7 @@ app.post(['/api/leads', '/leads'], async (req, res) => {
     bodyCopy.name = String(bodyCopy.name || '').trim();
     bodyCopy.phone = String(bodyCopy.phone || '').trim();
     bodyCopy.email = String(bodyCopy.email || '').trim(); // Blank is allowed and respects NOT NULL
-    bodyCopy.targetCourse = String(bodyCopy.targetCourse || 'IELTS Academic').trim();
+    bodyCopy.targetCourse = String(bodyCopy.targetCourse || 'IELTS Revolution').trim();
     bodyCopy.targetBand = String(bodyCopy.targetBand || '7.0').trim();
     bodyCopy.destination = String(bodyCopy.destination || 'United Kingdom').trim();
     bodyCopy.source = String(bodyCopy.source || 'Website Form').trim();
@@ -1278,7 +1278,7 @@ app.post('/api/meta/test-event', async (req, res) => {
       phone: '+8801812345678',
       status: 'New Lead',
       source: 'Facebook Ads',
-      targetCourse: 'IELTS Academic'
+      targetCourse: 'IELTS Revolution'
     };
 
     const url = `https://graph.facebook.com/v17.0/${pixelId}/events?access_token=${accessToken}`;
@@ -1470,7 +1470,7 @@ Please provide:
     const simulationContent = `### 📊 [SIMULATED] Claude AI Elite Student Profile & Conversion Index
 
 **Student Analyzer Metrics:**
-*   **Student Profile:** Selected candidate is prioritizing **${lead.targetCourse || 'IELTS Academic'}** focusing on an ambitious target band score of **${lead.targetBand || '7.5+'}**.
+*   **Student Profile:** Selected candidate is prioritizing **${lead.targetCourse || 'IELTS Revolution'}** focusing on an ambitious target band score of **${lead.targetBand || '7.5+'}**.
 *   **Enrollment Readiness Index:** **${randomScore}/100** (Excellent potential. Highly motivated by target destination **${lead.destination || 'Canada/UK'}**).
 *   **Estimated Life-Cycle Value (LTV):** $${Number(lead.expectedValue || 150) * 1.5} USD (Based on study mode: *${lead.preferences?.studyMode || 'Hybrid'}* and target course level).
 

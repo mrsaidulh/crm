@@ -786,7 +786,7 @@ if (String(err).toLowerCase().includes('offline')) {
         name: 'Default Welcome SMS Template',
         type: 'SMS',
         subject: 'Welcome',
-        body: 'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
+        body: 'Hello {{name}}, welcome to IELTS Revolution! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
       },
       {
         id: `tpl_payment_reminder_sms_${targetUid}`,

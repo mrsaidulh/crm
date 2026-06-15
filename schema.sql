@@ -1,4 +1,4 @@
--- Database construction schema for cPanel deployment of IELTS Academic CRM
+-- Database construction schema for cPanel deployment of IELTS Revolution CRM
 -- This is standard ANSI SQL compatible with MySQL 5.7+ and 8.0+
 -- 
 -- Target Database: `mockhub_crm`
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS `leads` (
   `status` VARCHAR(64) NOT NULL DEFAULT 'New',
   `expected_value` INT DEFAULT 0,
   `notes` TEXT DEFAULT NULL,
-  `target_course` VARCHAR(128) DEFAULT 'IELTS Academic',
+  `target_course` VARCHAR(128) DEFAULT 'IELTS Revolution',
   `target_band` VARCHAR(32) DEFAULT NULL,
   `destination` VARCHAR(128) DEFAULT 'United Kingdom',
   `tags` JSON DEFAULT NULL, -- Array of strings

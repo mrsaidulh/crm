@@ -267,7 +267,7 @@ export default function LeadsView() {
   const downloadTemplateCSV = () => {
     const templateContent =
       "Name,Email,Phone,Source,Target Course,Target Band,Destination,Expected Value,Notes\n" +
-      "John Doe,john@example.com,01712345678,Facebook Ads,IELTS Academic,7.5,Australia,15000,Interested in quick study visa info\n" +
+      "John Doe,john@example.com,01712345678,Facebook Ads,IELTS Revolution,7.5,Australia,15000,Interested in quick study visa info\n" +
       "Jane Smith,jane@example.com,01812345678,Google Ads,IELTS General,6.5,Canada,12000,Needs weekday batches";
     const blob = new Blob([templateContent], {
       type: "text/csv;charset=utf-8;",
@@ -409,7 +409,7 @@ export default function LeadsView() {
           : getVal(3, "Direct");
         const targetCourse = hasHeader
           ? getVal(colIndices.targetCourse)
-          : getVal(4, "IELTS Academic");
+          : getVal(4, "IELTS Revolution");
         const targetBand = hasHeader
           ? getVal(colIndices.targetBand)
           : getVal(5, "7.0");
@@ -428,7 +428,7 @@ export default function LeadsView() {
           email,
           phone,
           source: source || "Direct",
-          targetCourse: targetCourse || "IELTS Academic",
+          targetCourse: targetCourse || "IELTS Revolution",
           targetBand: targetBand || "7.0",
           destination: destination || "United Kingdom",
           expectedValue: expectedValue || "",
@@ -464,7 +464,7 @@ export default function LeadsView() {
         source: raw.source?.trim() || "Direct",
         status: "New Lead" as LeadStatus,
         expectedValue: raw.expectedValue || "",
-        targetCourse: raw.targetCourse || "IELTS Academic",
+        targetCourse: raw.targetCourse || "IELTS Revolution",
         targetBand: raw.targetBand || "7.0",
         destination: raw.destination || "United Kingdom",
         tags: ["bulk-imported"],
@@ -565,7 +565,7 @@ export default function LeadsView() {
     source: "Direct" as LeadSource,
     notes: "",
     expectedValue: "" as string | number,
-    targetCourse: "IELTS Academic",
+    targetCourse: "IELTS Revolution",
     targetBand: "",
     destination: "United Kingdom",
     tags: "",
@@ -1232,7 +1232,7 @@ export default function LeadsView() {
       source: "Direct",
       notes: "",
       expectedValue: "",
-      targetCourse: "IELTS Academic",
+      targetCourse: "IELTS Revolution",
       targetBand: "",
       destination: "United Kingdom",
       tags: "",
@@ -1280,7 +1280,7 @@ export default function LeadsView() {
       source: lead.source,
       notes: lead.notes || "",
       expectedValue: lead.expectedValue || "",
-      targetCourse: lead.targetCourse || "IELTS Academic",
+      targetCourse: lead.targetCourse || "IELTS Revolution",
       targetBand: lead.targetBand || "",
       destination: dest,
       tags: lead.tags ? lead.tags.join(", ") : "",
@@ -2831,7 +2831,7 @@ export default function LeadsView() {
                     className={getFieldStyles("targetCourse")}
                   >
                     <option value="">Select Course</option>
-                    <option value="IELTS Academic">IELTS Academic</option>
+                    <option value="IELTS Revolution">IELTS Revolution</option>
                     <option value="IELTS GT">IELTS GT</option>
                     <option value="IELTS UKVI">IELTS UKVI</option>
                     <option value="IELTS Life Skills">IELTS Life Skills</option>
@@ -3243,7 +3243,7 @@ export default function LeadsView() {
                 </div>
                 <textarea
                   rows={6}
-                  placeholder={`Example row format (First row is headers or positional values like Name,Email,Phone,Source,Course,Band,Destination):\nJohn Doe,john@example.com,01712345678,Facebook Ads,IELTS Academic,7.5,Australia,Interested in fast-track coaching\nJane Doe,jane@example.com,01812345678,Google Ads,IELTS General,6.5,Canada,Wants evening courses`}
+                  placeholder={`Example row format (First row is headers or positional values like Name,Email,Phone,Source,Course,Band,Destination):\nJohn Doe,john@example.com,01712345678,Facebook Ads,IELTS Revolution,7.5,Australia,Interested in fast-track coaching\nJane Doe,jane@example.com,01812345678,Google Ads,IELTS General,6.5,Canada,Wants evening courses`}
                   value={bulkInputText}
                   onChange={(e) => setBulkInputText(e.target.value)}
                   className="w-full text-xs font-mono p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-slate-50 placeholder-slate-400"
