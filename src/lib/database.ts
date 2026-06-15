@@ -1119,6 +1119,14 @@ export const dbService = {
     // Curated dynamic SMS templates to guarantees availability across any authenticated user ID
     const systemTemplates: Template[] = [
       {
+        id: `tpl_zoom_class_reminder_new_${targetUid}`,
+        userId: targetUid,
+        name: 'Zoom Class Reminder',
+        type: 'SMS',
+        subject: 'Zoom Class Info',
+        body: 'Hello {{name}}, your live Zoom class for "{{classtopic}}" is scheduled on {{classdate}} at {{classtime}}. Join URL: {{zoomurl}} | Meeting ID: {{zoomid}} | Passcode: {{zoompasscode}}. See you there!'
+      },
+      {
         id: `tpl_welcome_sms_default_${targetUid}`,
         userId: targetUid,
         name: 'Default Welcome SMS Template',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
+import { motion } from "motion/react";
 import {
   Search,
   Plus,
@@ -14,6 +15,7 @@ import {
   Tag,
   Globe,
   Sparkles,
+  Video,
   CheckCircle2,
   AlertTriangle,
   Upload,
@@ -108,6 +110,24 @@ export default function LeadsView() {
     results: string[];
   } | null>(null);
 
+  // Zoom / Live Class Parameter states for manual dialog
+  const [classTopic, setClassTopic] = useState(() => localStorage.getItem("zoom_class_topic") || "IELTS Speaking & Writing Band 8+ Masterclass");
+  const [classDate, setClassDate] = useState(() => localStorage.getItem("zoom_class_date") || "Today (Monday)");
+  const [classTime, setClassTime] = useState(() => localStorage.getItem("zoom_class_time") || "06:00 PM GMT");
+  const [zoomUrl, setZoomUrl] = useState(() => localStorage.getItem("zoom_zoom_url") || "https://zoom.us/j/9518473022");
+  const [zoomId, setZoomId] = useState(() => localStorage.getItem("zoom_zoom_id") || "951 847 3022");
+  const [zoomPasscode, setZoomPasscode] = useState(() => localStorage.getItem("zoom_zoom_passcode") || "IELTS88");
+
+  // Save dynamic template parameters to local storage whenever they change
+  useEffect(() => {
+    localStorage.setItem("zoom_class_topic", classTopic);
+    localStorage.setItem("zoom_class_date", classDate);
+    localStorage.setItem("zoom_class_time", classTime);
+    localStorage.setItem("zoom_zoom_url", zoomUrl);
+    localStorage.setItem("zoom_zoom_id", zoomId);
+    localStorage.setItem("zoom_zoom_passcode", zoomPasscode);
+  }, [classTopic, classDate, classTime, zoomUrl, zoomId, zoomPasscode]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch templates when modal is opened
@@ -150,7 +170,13 @@ export default function LeadsView() {
       .replace(/\{\{email\}\}/gi, lead.email || "")
       .replace(/\{\{targetcourse\}\}/gi, lead.targetCourse || "")
       .replace(/\{\{targetband\}\}/gi, lead.targetBand || "")
-      .replace(/\{\{destination\}\}/gi, lead.destination || "");
+      .replace(/\{\{destination\}\}/gi, lead.destination || "")
+      .replace(/\{\{classtopic\}\}/gi, classTopic)
+      .replace(/\{\{classdate\}\}/gi, classDate)
+      .replace(/\{\{classtime\}\}/gi, classTime)
+      .replace(/\{\{zoomid\}\}/gi, zoomId)
+      .replace(/\{\{zoompasscode\}\}/gi, zoomPasscode)
+      .replace(/\{\{zoomurl\}\}/gi, zoomUrl);
   };
 
   const insertPlaceholderAtCursor = (placeholder: string) => {
@@ -3421,6 +3447,96 @@ export default function LeadsView() {
                 </select>
               </div>
 
+              {/* Configurable Zoom meeting details editor if template has zoom parameters */}
+              {(smsMessage.includes("{{classtopic}}") ||
+                smsMessage.includes("{{classdate}}") ||
+                smsMessage.includes("{{classtime}}") ||
+                smsMessage.includes("{{zoomurl}}") ||
+                smsMessage.includes("{{zoomid}}") ||
+                smsMessage.includes("{{zoompasscode}}")) && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 space-y-3 animate-fade-in"
+                >
+                  <div className="flex items-center justify-between gap-1.5 text-indigo-950 w-full">
+                    <div className="flex items-center gap-1.5">
+                      <Video className="w-4 h-4 text-indigo-600" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider">Configure Zoom Class Parameters</span>
+                    </div>
+                    <span className="text-[10px] font-medium text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-widest text-[8px] scale-95 origin-right">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                      </span>
+                      Saved Automatically
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Class Topic</label>
+                      <input
+                        type="text"
+                        value={classTopic}
+                        onChange={(e) => setClassTopic(e.target.value)}
+                        placeholder="e.g. Speaking Band 8+ Masterclass"
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Class Date</label>
+                      <input
+                        type="text"
+                        value={classDate}
+                        onChange={(e) => setClassDate(e.target.value)}
+                        placeholder="e.g. Today (Monday)"
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Class Time</label>
+                      <input
+                        type="text"
+                        value={classTime}
+                        onChange={(e) => setClassTime(e.target.value)}
+                        placeholder="e.g. 06:00 PM GMT"
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Zoom URL</label>
+                      <input
+                        type="text"
+                        value={zoomUrl}
+                        onChange={(e) => setZoomUrl(e.target.value)}
+                        placeholder="https://zoom.us/j/..."
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Meeting ID</label>
+                      <input
+                        type="text"
+                        value={zoomId}
+                        onChange={(e) => setZoomId(e.target.value)}
+                        placeholder="951 847 3022"
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-indigo-850 uppercase tracking-wider block">Passcode</label>
+                      <input
+                        type="text"
+                        value={zoomPasscode}
+                        onChange={(e) => setZoomPasscode(e.target.value)}
+                        placeholder="IELTS88"
+                        className="w-full text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-850 font-medium"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Message body input */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -3449,30 +3565,61 @@ export default function LeadsView() {
                 />
 
                 {/* Auto tag insertion pills */}
-                <div className="space-y-1 pt-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Click to insert dynamic client details:
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {[
-                      { key: "{{name}}", label: "Student Name" },
-                      { key: "{{phone}}", label: "Phone" },
-                      { key: "{{email}}", label: "Email" },
-                      { key: "{{targetcourse}}", label: "Target Course" },
-                      { key: "{{targetband}}", label: "Target Band Score" },
-                      { key: "{{destination}}", label: "Destination Country" },
-                    ].map((item) => (
-                      <button
-                        type="button"
-                        key={item.key}
-                        onClick={() => insertPlaceholderAtCursor(item.key)}
-                        disabled={isSendingSms}
-                        className="text-[10px] font-bold bg-slate-50 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 px-2 py-1 rounded-md transition-all cursor-pointer inline-flex items-center gap-1"
-                      >
-                        <Plus className="w-2.5 h-2.5" />
-                        {item.label}
-                      </button>
-                    ))}
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-emerald-500" />
+                      Student Attributes:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { key: "{{name}}", label: "Student Name" },
+                        { key: "{{phone}}", label: "Phone" },
+                        { key: "{{email}}", label: "Email" },
+                        { key: "{{targetcourse}}", label: "Target Course" },
+                        { key: "{{targetband}}", label: "Target Band Score" },
+                        { key: "{{destination}}", label: "Destination" },
+                      ].map((item) => (
+                        <button
+                          type="button"
+                          key={item.key}
+                          onClick={() => insertPlaceholderAtCursor(item.key)}
+                          disabled={isSendingSms}
+                          className="text-[10px] font-bold bg-slate-50 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 px-2 py-1 rounded-md transition-all cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-indigo-500 tracking-wider flex items-center gap-1">
+                      <Video className="w-3.5 h-3.5 text-indigo-500" />
+                      Zoom Live Class Parameters:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { key: "{{classtopic}}", label: "Class Topic" },
+                        { key: "{{classdate}}", label: "Class Date" },
+                        { key: "{{classtime}}", label: "Class Time" },
+                        { key: "{{zoomurl}}", label: "Zoom Link" },
+                        { key: "{{zoomid}}", label: "Meeting ID" },
+                        { key: "{{zoompasscode}}", label: "Passcode" },
+                      ].map((item) => (
+                        <button
+                          type="button"
+                          key={item.key}
+                          onClick={() => insertPlaceholderAtCursor(item.key)}
+                          disabled={isSendingSms}
+                          className="text-[10px] font-bold bg-indigo-50 border border-indigo-100 hover:bg-indigo-100/70 text-indigo-700 px-2 py-1 rounded-md transition-all cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Plus className="w-2.5 h-2.5 text-indigo-500" />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

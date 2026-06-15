@@ -744,6 +744,9 @@ if (String(err).toLowerCase().includes('offline')) {
 
   // --- TEMPLATES ---
   async getTemplates(userId?: string): Promise<Template[]> {
+    const targetUid = userId || 'ielts_crm_main_user';
+    let baseTemplates: Template[] = [];
+
     if (isFirebaseActive() && firestoreDb) {
       try {
         const templateRef = collection(firestoreDb, 'templates');
@@ -751,20 +754,95 @@ if (String(err).toLowerCase().includes('offline')) {
         const snapshot = await getDocs(q);
         const list: Template[] = [];
         snapshot.forEach((s) => list.push(s.data() as Template));
-        return list;
+        baseTemplates = list;
       } catch (err) {
-        
-if (String(err).toLowerCase().includes('offline')) {
-  console.warn('[FirebaseService] Operation suppressed (offline).');
-} else {
-  console.error('[FirebaseService] Operation failed:', err);
-}
-
+        if (String(err).toLowerCase().includes('offline')) {
+          console.warn('[FirebaseService] Operation suppressed (offline).');
+        } else {
+          console.error('[FirebaseService] Operation failed:', err);
+        }
         handleFirestoreError(err, OperationType.LIST, 'templates');
+        const local = getLocalItem<Template>('templates');
+        baseTemplates = userId ? local.filter(t => t.userId === userId) : local;
+      }
+    } else {
+      const local = getLocalItem<Template>('templates');
+      baseTemplates = userId ? local.filter(t => t.userId === userId) : local;
+    }
+
+    // Curated dynamic SMS templates to guarantee availability across any authenticated user ID
+    const systemTemplates: Template[] = [
+      {
+        id: `tpl_zoom_class_reminder_new_${targetUid}`,
+        userId: targetUid,
+        name: 'Zoom Class Reminder',
+        type: 'SMS',
+        subject: 'Zoom Class Info',
+        body: 'Hello {{name}}, your live Zoom class for "{{classtopic}}" is scheduled on {{classdate}} at {{classtime}}. Join URL: {{zoomurl}} | Meeting ID: {{zoomid}} | Passcode: {{zoompasscode}}. See you there!'
+      },
+      {
+        id: `tpl_welcome_sms_default_${targetUid}`,
+        userId: targetUid,
+        name: 'Default Welcome SMS Template',
+        type: 'SMS',
+        subject: 'Welcome',
+        body: 'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
+      },
+      {
+        id: `tpl_payment_reminder_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Payment Reminder SMS Template',
+        type: 'SMS',
+        subject: 'Payment Reminder',
+        body: 'Dear {{name}}, this is a friendly reminder that your enrollment payment for {{targetcourse}} is outstanding. Please complete the transaction at your earliest convenience to activate your lessons. Let us know if you need assistance.'
+      },
+      {
+        id: `tpl_zoom_class_reminder_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Zoom Live Class Invitation SMS Template',
+        type: 'SMS',
+        subject: 'Zoom Class Info',
+        body: 'Hello {{name}}, your IELTS live Zoom class for {{targetcourse}} is scheduled today. Zoom URL: https://zoom.us/j/9991234567 | Meeting ID: 999 123 4567 | Password: IELTS2026. Please log in on time!'
+      },
+      {
+        id: `tpl_payment_urgent_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Urgent Payment Alert SMS Template',
+        type: 'SMS',
+        subject: 'Action Required',
+        body: 'Hi {{name}}, our records show that your registration for the upcoming {{targetcourse}} batch is pending due to unpaid fees. To secure your slot and get access to study materials, please complete payment today. Support call: +123456789'
+      },
+      {
+        id: `tpl_mock_test_zoom_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'IELTS Mock Test Zoom Class SMS Template',
+        type: 'SMS',
+        subject: 'Live Mock Test Info',
+        body: 'Hi {{name}}, your IELTS Full length Mock Test Zoom Class is scheduled today. Zoom URL: https://zoom.us/j/8887654321 | ID: 888 765 4321 | Pass: IELTSMOCK. Get ready with writing materials!'
+      }
+    ];
+
+    // Combine current user rows/memory-entries with the dynamic system presets
+    const combined: Template[] = [...baseTemplates];
+    for (const sysTpl of systemTemplates) {
+      if (!combined.some(t => t.id === sysTpl.id)) {
+        // Asynchronously populate into Firestore so they persist natively
+        if (isFirebaseActive() && firestoreDb) {
+          setDoc(doc(firestoreDb, 'templates', sysTpl.id), sysTpl)
+            .catch((e: any) => console.log('[Firebase] Auto-seed background insert error (ignoring):', e.message));
+        } else {
+          // Store in-memory / local storage
+          const local = getLocalItem<Template>('templates');
+          if (!local.some(t => t.id === sysTpl.id)) {
+            local.push(sysTpl);
+            saveLocalItem('templates', local);
+          }
+        }
+        combined.push(sysTpl);
       }
     }
-    const local = getLocalItem<Template>('templates');
-    return userId ? local.filter(t => t.userId === userId) : local;
+
+    return combined;
   },
 
   async insertTemplate(template: Template): Promise<void> {
