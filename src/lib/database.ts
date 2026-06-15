@@ -1095,26 +1095,10 @@ export const dbService = {
   // --- TEMPLATES ---
   async getTemplates(userId?: string): Promise<Template[]> {
     const targetUid = userId || 'ielts_crm_main_user';
+    let baseTemplates: Template[] = [];
+
     if (pool) {
       try {
-        // Auto-seed default Welcome SMS template if not present
-        const [existing] = await pool.execute('SELECT * FROM templates WHERE id = ?', ['tpl_welcome_sms_default']);
-        if ((existing as any[]).length === 0) {
-          await pool.execute(
-            `INSERT INTO templates (id, user_id, name, type, subject, body) 
-             VALUES (?, ?, ?, ?, ?, ?)`, 
-            [
-              'tpl_welcome_sms_default',
-              targetUid,
-              'Default Welcome SMS Template',
-              'SMS',
-              'Welcome',
-              'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
-            ]
-          );
-          console.log('[MySQL] Auto-seeded default Welcome SMS Template.');
-        }
-
         let rows: any[];
         if (userId) {
           const [results] = await pool.execute('SELECT * FROM templates WHERE user_id = ?', [userId]);
@@ -1123,26 +1107,80 @@ export const dbService = {
           const [results] = await pool.execute('SELECT * FROM templates');
           rows = results as any[];
         }
-        return rows.map(mapDbRowToTemplate);
+        baseTemplates = rows.map(mapDbRowToTemplate);
       } catch (err) {
-        console.error('[MySQL] getTemplates failed:', err);
+        console.error('[MySQL] getTemplates base query failed:', err);
+        baseTemplates = inMemoryTemplates.filter(t => t.userId === targetUid);
       }
+    } else {
+      baseTemplates = inMemoryTemplates.filter(t => t.userId === targetUid);
     }
-    // High-performance local in-memory fallback
-    if (!inMemoryTemplates.some(t => t.id === 'tpl_welcome_sms_default')) {
-      inMemoryTemplates.push({
-        id: 'tpl_welcome_sms_default',
+
+    // Curated dynamic SMS templates to guarantees availability across any authenticated user ID
+    const systemTemplates: Template[] = [
+      {
+        id: `tpl_welcome_sms_default_${targetUid}`,
         userId: targetUid,
         name: 'Default Welcome SMS Template',
         type: 'SMS',
         subject: 'Welcome',
         body: 'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
-      });
+      },
+      {
+        id: `tpl_payment_reminder_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Payment Reminder SMS Template',
+        type: 'SMS',
+        subject: 'Payment Reminder',
+        body: 'Dear {{name}}, this is a friendly reminder that your enrollment payment for {{targetcourse}} is outstanding. Please complete the transaction at your earliest convenience to activate your lessons. Let us know if you need assistance.'
+      },
+      {
+        id: `tpl_zoom_class_reminder_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Zoom Live Class Invitation SMS Template',
+        type: 'SMS',
+        subject: 'Zoom Class Info',
+        body: 'Hello {{name}}, your IELTS live Zoom class for {{targetcourse}} is scheduled today. Zoom URL: https://zoom.us/j/9991234567 | Meeting ID: 999 123 4567 | Password: IELTS2026. Please log in on time!'
+      },
+      {
+        id: `tpl_payment_urgent_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'Urgent Payment Alert SMS Template',
+        type: 'SMS',
+        subject: 'Action Required',
+        body: 'Hi {{name}}, our records show that your registration for the upcoming {{targetcourse}} batch is pending due to unpaid fees. To secure your slot and get access to study materials, please complete payment today. Support call: +123456789'
+      },
+      {
+        id: `tpl_mock_test_zoom_sms_${targetUid}`,
+        userId: targetUid,
+        name: 'IELTS Mock Test Zoom Class SMS Template',
+        type: 'SMS',
+        subject: 'Live Mock Test Info',
+        body: 'Hi {{name}}, your IELTS Full length Mock Test Zoom Class is scheduled today. Zoom URL: https://zoom.us/j/8887654321 | ID: 888 765 4321 | Pass: IELTSMOCK. Get ready with writing materials!'
+      }
+    ];
+
+    // Combine current user rows/memory-entries with the dynamic system presets
+    const combined: Template[] = [...baseTemplates];
+    for (const sysTpl of systemTemplates) {
+      if (!combined.some(t => t.id === sysTpl.id)) {
+        // Asynchronously populate into database so they persist natively
+        if (pool) {
+          pool.execute(
+            `INSERT IGNORE INTO templates (id, user_id, name, type, subject, body) VALUES (?, ?, ?, ?, ?, ?)`,
+            [sysTpl.id, sysTpl.userId, sysTpl.name, sysTpl.type, sysTpl.subject || null, sysTpl.body]
+          ).catch((e: any) => console.log('[MySQL] Auto-seed background insert error (ignoring):', e.message));
+        } else {
+          // Store in-memory
+          if (!inMemoryTemplates.some(t => t.id === sysTpl.id)) {
+            inMemoryTemplates.push(sysTpl);
+          }
+        }
+        combined.push(sysTpl);
+      }
     }
-    if (userId) {
-      return inMemoryTemplates.filter(t => t.userId === userId);
-    }
-    return inMemoryTemplates;
+
+    return combined;
   },
 
   async insertTemplate(template: Template): Promise<void> {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, MessageSquare, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck, ShieldAlert, Lock, Unlock, Timer, Check, Copy, KeyRound, History } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Smartphone, Settings, Menu, X, LogOut, GraduationCap, ChevronRight, FormInput, KanbanSquare, CheckSquare, Star, FileText, Zap, ShieldCheck, ShieldAlert, Lock, Unlock, Timer, Check, Copy, KeyRound, History } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { TOTP } from 'totp-generator';
 import Dashboard from './components/Dashboard';
@@ -14,9 +14,10 @@ import SettingsView from './components/SettingsView';
 import WorkflowsView from './components/WorkflowsView';
 import AuditLogsView from './components/AuditLogsView';
 import SmsLogsView from './components/SmsLogsView';
+import SmsBroadcasterView from './components/SmsBroadcasterView';
 import { useAuth } from './lib/AuthContext';
 
-type View = 'dashboard' | 'funnel' | 'leads' | 'customers' | 'tasks' | 'campaigns' | 'templates' | 'forms' | 'workflows' | 'settings' | 'audit' | 'sms-logs';
+type View = 'dashboard' | 'funnel' | 'leads' | 'customers' | 'tasks' | 'campaigns' | 'templates' | 'forms' | 'workflows' | 'settings' | 'audit' | 'sms-logs' | 'sms-broadcaster';
 
 
 export default function App() {
@@ -490,6 +491,8 @@ export default function App() {
         return <TasksView />;
       case 'campaigns':
         return <SmsEmailCampaignsView />;
+      case 'sms-broadcaster':
+        return <SmsBroadcasterView />;
       case 'templates':
         return <TemplatesView />;
       case 'forms':
@@ -585,6 +588,7 @@ export default function App() {
             </div>
             <nav className="px-4 space-y-1">
               <NavItem view="campaigns" icon={<MessageSquare className="w-5 h-5" />} label="Broadcast Campaigns" />
+              <NavItem view="sms-broadcaster" icon={<Smartphone className="w-5 h-5" />} label="Direct SMS Broadcaster" />
               <NavItem view="templates" icon={<FileText className="w-5 h-5" />} label="Message Templates" />
               <NavItem view="forms" icon={<FormInput className="w-5 h-5" />} label="Web Forms" />
               <NavItem view="workflows" icon={<Zap className="w-5 h-5" />} label="Workflows" />

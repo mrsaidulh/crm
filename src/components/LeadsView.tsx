@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
   Search,
@@ -26,6 +26,9 @@ import {
   FileText,
   Check,
   RefreshCw,
+  MessageSquare,
+  Smartphone,
+  Send,
 } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
 import type { Lead, LeadStatus, LeadSource } from "../types";
@@ -91,6 +94,149 @@ export default function LeadsView() {
     active: false,
     results: [],
   });
+
+  // Manual SMS States
+  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+  const [smsRecipients, setSmsRecipients] = useState<Lead[]>([]);
+  const [smsTemplates, setSmsTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [isSendingSms, setIsSendingSms] = useState(false);
+  const [smsLogsSummary, setSmsLogsSummary] = useState<{
+    successCount: number;
+    failedCount: number;
+    results: string[];
+  } | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fetch templates when modal is opened
+  const handleOpenSmsModal = (recipients: Lead[]) => {
+    setSmsRecipients(recipients);
+    setIsSmsModalOpen(true);
+    setSmsMessage("");
+    setSelectedTemplateId("");
+    setSmsLogsSummary(null);
+
+    fetch(`/api/templates?userId=${encodeURIComponent(userId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.templates) {
+          // Filter only SMS templates
+          const smsTpls = data.templates.filter((tpl: any) => tpl.type === "SMS");
+          setSmsTemplates(smsTpls);
+        }
+      })
+      .catch((error) => console.error("Error fetching templates for manual SMS:", error));
+  };
+
+  const handleSelectTemplate = (tplId: string) => {
+    setSelectedTemplateId(tplId);
+    if (!tplId) {
+      setSmsMessage("");
+      return;
+    }
+    const selected = smsTemplates.find((t) => t.id === tplId);
+    if (selected) {
+      setSmsMessage(selected.body);
+    }
+  };
+
+  const replaceSmsPlaceholders = (text: string, lead: Lead) => {
+    if (!text) return "";
+    return text
+      .replace(/\{\{name\}\}/gi, lead.name || "")
+      .replace(/\{\{phone\}\}/gi, lead.phone || "")
+      .replace(/\{\{email\}\}/gi, lead.email || "")
+      .replace(/\{\{targetcourse\}\}/gi, lead.targetCourse || "")
+      .replace(/\{\{targetband\}\}/gi, lead.targetBand || "")
+      .replace(/\{\{destination\}\}/gi, lead.destination || "");
+  };
+
+  const insertPlaceholderAtCursor = (placeholder: string) => {
+    const txtarea = textareaRef.current;
+    if (!txtarea) {
+      setSmsMessage((prev) => prev + placeholder);
+      return;
+    }
+    const start = txtarea.selectionStart;
+    const end = txtarea.selectionEnd;
+    const text = txtarea.value;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+    const updated = before + placeholder + after;
+    setSmsMessage(updated);
+    
+    // Reset cursor to be right after the inserted placeholder
+    setTimeout(() => {
+      txtarea.focus();
+      txtarea.setSelectionRange(start + placeholder.length, start + placeholder.length);
+    }, 10);
+  };
+
+  const handleSendManualSms = async () => {
+    if (!smsMessage.trim() || smsRecipients.length === 0) return;
+    setIsSendingSms(true);
+    setSmsLogsSummary(null);
+
+    let succ = 0;
+    let fail = 0;
+    const runLogs: string[] = [];
+
+    // Process all recipients
+    for (const lead of smsRecipients) {
+      const personalizedMessage = replaceSmsPlaceholders(smsMessage, lead);
+      try {
+        const response = await fetch("/api/sms/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: lead.phone,
+            message: personalizedMessage,
+            userId,
+          }),
+        });
+
+        const resData = await response.json();
+        if (response.ok && resData.success) {
+          succ++;
+          runLogs.push(`✓ Connected to ${lead.name} (${lead.phone}) - Sent successfully.`);
+          
+          // Add a custom note on the lead interaction log
+          await fetch(`/api/leads/${lead.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              notes: `${lead.notes || ""}\n\n[SMS sent on ${format(new Date(), "PP p")}]: "${personalizedMessage}"`.trim(),
+            }),
+          }).catch(err => console.warn(`Timeline sync error for ${lead.name}`, err));
+        } else {
+          fail++;
+          runLogs.push(`✗ Failed for ${lead.name} (${lead.phone}) - ${resData.error || "Provider rejected payload instruction."}`);
+        }
+      } catch (err: any) {
+        fail++;
+        runLogs.push(`✗ Error connecting for ${lead.name} (${lead.phone}) - ${err.message || "Network Error."}`);
+      }
+    }
+
+    setSmsLogsSummary({
+      successCount: succ,
+      failedCount: fail,
+      results: runLogs,
+    });
+    setIsSendingSms(false);
+
+    // Refresh student leads state
+    fetch(`/api/leads?userId=${encodeURIComponent(userId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.leads) {
+          setLeads(data.leads);
+        }
+      })
+      .catch((error) => console.error("Error refreshing leads page after custom SMS dispatch:", error));
+  };
 
   const downloadTemplateCSV = () => {
     const templateContent =
@@ -1881,6 +2027,17 @@ export default function LeadsView() {
               </div>
 
               <button
+                onClick={() => {
+                  const targetLeads = leads.filter(l => selectedLeadIds.includes(l.id));
+                  handleOpenSmsModal(targetLeads);
+                }}
+                className="bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Send SMS
+              </button>
+
+              <button
                 onClick={handleBulkDelete}
                 className="bg-white hover:bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
               >
@@ -2145,6 +2302,16 @@ export default function LeadsView() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenSmsModal([lead]);
+                              }}
+                              className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                              title="Send Manual SMS"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => openEditModal(lead)}
                               className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
@@ -3169,6 +3336,218 @@ export default function LeadsView() {
                 {bulkImportProgress.active
                   ? "Importing..."
                   : `Import ${parseLeadsFromText(bulkInputText).length} Lead${parseLeadsFromText(bulkInputText).length === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual & Bulk SMS Dispatch Modal */}
+      {isSmsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div
+            className="absolute inset-0"
+            onClick={() => {
+              if (!isSendingSms) setIsSmsModalOpen(false);
+            }}
+          ></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 font-display">
+                    Send Direct CRM SMS
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Broadcast manual notifications or personalized templates
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSmsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-100"
+                disabled={isSendingSms}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content Scroll */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+              {/* Recipient summary info banner */}
+              <div className="bg-indigo-50/40 border border-indigo-100/50 p-4 rounded-xl space-y-2">
+                <span className="text-[10px] font-black uppercase text-indigo-750 tracking-wider bg-indigo-100/60 px-2 py-0.5 rounded-full">
+                  Target Recipients ({smsRecipients.length})
+                </span>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                  {smsRecipients.slice(0, 8).map((recipient) => (
+                    <span
+                      key={recipient.id}
+                      className="text-[11px] font-medium bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-2xs"
+                    >
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                      {recipient.name} ({recipient.phone})
+                    </span>
+                  ))}
+                  {smsRecipients.length > 8 && (
+                    <span className="text-[11px] font-bold text-indigo-600 py-1 px-1">
+                      + {smsRecipients.length - 8} more student(s) selected
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Template selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 block uppercase tracking-wide">
+                  Load Saved Template (Optional)
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleSelectTemplate(e.target.value)}
+                  className="w-full text-xs font-medium border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer text-slate-750"
+                  disabled={isSendingSms}
+                >
+                  <option value="">-- Write Custom SMS from scratch --</option>
+                  {smsTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name} [Subject: {tpl.subject || "No Subject"}]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Message body input */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                    Message Body Content
+                  </label>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      smsMessage.length > 160
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {smsMessage.length} characters (
+                    {Math.ceil(smsMessage.length / 160)} Part{Math.ceil(smsMessage.length / 160) === 1 ? "" : "s"})
+                  </span>
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  rows={4}
+                  value={smsMessage}
+                  onChange={(e) => setSmsMessage(e.target.value)}
+                  placeholder="Enter notification texts here. E.g. Hello {{name}}, Welcome to IELTS Academy! Zoom url: https://zoom.us/j/999 ID: 123 Pass: 456"
+                  className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white placeholder-slate-400 font-sans leading-relaxed"
+                  disabled={isSendingSms}
+                />
+
+                {/* Auto tag insertion pills */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Click to insert dynamic client details:
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { key: "{{name}}", label: "Student Name" },
+                      { key: "{{phone}}", label: "Phone" },
+                      { key: "{{email}}", label: "Email" },
+                      { key: "{{targetcourse}}", label: "Target Course" },
+                      { key: "{{targetband}}", label: "Target Band Score" },
+                      { key: "{{destination}}", label: "Destination Country" },
+                    ].map((item) => (
+                      <button
+                        type="button"
+                        key={item.key}
+                        onClick={() => insertPlaceholderAtCursor(item.key)}
+                        disabled={isSendingSms}
+                        className="text-[10px] font-bold bg-slate-50 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 px-2 py-1 rounded-md transition-all cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Block (for single recipient) */}
+              {smsRecipients.length > 0 && smsMessage.trim().length > 0 && (
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-indigo-500 font-bold" />
+                    Live Personalized Example Preview ({smsRecipients[0].name})
+                  </span>
+                  <p className="text-xs text-slate-700 bg-white border border-slate-100 rounded-lg p-2.5 shadow-3xs leading-relaxed font-sans whitespace-pre-wrap">
+                    {replaceSmsPlaceholders(smsMessage, smsRecipients[0])}
+                  </p>
+                </div>
+              )}
+
+              {/* Broadcast Run Summary logs */}
+              {smsLogsSummary && (
+                <div className="bg-slate-900 rounded-xl p-4 text-white space-y-2.5 border border-slate-850 shadow-md">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                    <span className="text-xs font-bold font-display text-indigo-300">
+                      Dispatched Direct Bulk Log Summary
+                    </span>
+                    <span className="text-[10px] font-bold bg-white/10 px-2.5 py-0.5 rounded-full font-mono">
+                      Success: {smsLogsSummary.successCount} | Failed: {smsLogsSummary.failedCount}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-[10px] font-mono h-24 overflow-y-auto text-slate-300 divide-y divide-white/5">
+                    {smsLogsSummary.results.map((log, idx) => (
+                      <div
+                        key={idx}
+                        className={`pt-1 pb-1 ${
+                          log.startsWith("✓") ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {log}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsSmsModalOpen(false)}
+                disabled={isSendingSms}
+                className="px-4 py-2 text-sm font-medium text-slate-705 hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleSendManualSms}
+                disabled={isSendingSms || !smsMessage.trim() || smsRecipients.length === 0}
+                className={`px-5 py-2 text-sm font-bold text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
+                  isSendingSms || !smsMessage.trim() || smsRecipients.length === 0
+                    ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-700 hover:scale-[1.02] cursor-pointer"
+                }`}
+              >
+                {isSendingSms ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Sending Broadcaster...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send to {smsRecipients.length} Recipient{smsRecipients.length === 1 ? "" : "s"}
+                  </>
+                )}
               </button>
             </div>
           </div>
