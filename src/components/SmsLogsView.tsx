@@ -11,10 +11,10 @@ import {
   Trash2,
   Calendar,
   AlertCircle,
-  CheckCircle2,
   XCircle,
   HelpCircle,
-  Fingerprint
+  Fingerprint,
+  CheckCircle
 } from 'lucide-react';
 import type { SmsLog } from '../types';
 
@@ -126,14 +126,6 @@ export default function SmsLogsView() {
     return matchesSearch && matchesProvider && matchesStatus;
   });
 
-  // Calculate statistics
-  const totalCount = logs.length;
-  const sentCount = logs.filter(l => l.status === 'Sent' || l.status === 'Delivered').length;
-  const pendingCount = logs.filter(l => l.status === 'Pending').length;
-  const failedCount = logs.filter(l => l.status === 'Failed').length;
-  const successRate = totalCount > 0 ? Math.round((sentCount / totalCount) * 100) : 100;
-  const simulationCount = logs.filter(l => l.provider === 'Simulation').length;
-
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       
@@ -179,45 +171,55 @@ export default function SmsLogsView() {
         </div>
       </div>
 
-      {/* Stats Quick-Grid */}
+      {/* KPI Statistic Summaries */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-center gap-4">
-          <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl text-slate-600">
+        {/* Card 1: Total Attempts */}
+        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-indigo-600">
             <Smartphone className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Attempts</p>
-            <p className="text-2xl font-bold text-slate-950 mt-0.5">{totalCount}</p>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Attempts</div>
+            <div className="text-2xl font-bold text-slate-800 mt-0.5">{logs.length}</div>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+        {/* Card 2: Successfully Sent */}
+        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center gap-4">
           <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-emerald-600">
-            <CheckCircle2 className="w-5 h-5" />
+            <CheckCircle className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Successfully Sent</p>
-            <p className="text-2xl font-bold text-slate-950 mt-0.5">{sentCount}</p>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Successfully Sent</div>
+            <div className="text-2xl font-bold text-slate-800 mt-0.5">
+              {logs.filter(l => l.status === 'Delivered' || l.status === 'Sent').length}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-center gap-4">
-          <div className={`p-3 rounded-xl border ${failedCount > 0 ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+        {/* Card 3: Failed / Errors */}
+        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl text-rose-600">
             <XCircle className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Failed / Errors</p>
-            <p className={`text-2xl font-bold mt-0.5 ${failedCount > 0 ? 'text-red-600' : 'text-slate-950'}`}>{failedCount}</p>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Failed / Errors</div>
+            <div className="text-2xl font-bold text-slate-800 mt-0.5">
+              {logs.filter(l => l.status === 'Failed').length}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-center gap-4">
-          <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-indigo-600">
+        {/* Card 4: Sandbox Simulated */}
+        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl text-amber-600">
             <Clock className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Sandbox Simulated</p>
-            <p className="text-2xl font-bold text-indigo-950 mt-0.5">{simulationCount}</p>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Sandbox Simulated</div>
+            <div className="text-2xl font-bold text-slate-800 mt-0.5">
+              {logs.filter(l => l.provider === 'Simulation').length}
+            </div>
           </div>
         </div>
       </div>
@@ -405,13 +407,15 @@ export default function SmsLogsView() {
                                       : 'bg-emerald-50/30 border-emerald-100 text-slate-700'
                                 }`}>
                                   {log.status !== 'Failed' ? (
-                                    <span>
-                                      Status OK. Remote provider received instruction payload. Received status: "{log.status}".
-                                      {log.errorDetails && <div className="mt-2 text-xs text-slate-500">Response / Detail logs: {log.errorDetails}</div>}
+                                    <span className="block">
+                                      <div className="font-bold flex items-center gap-1.5 mb-1.5 text-emerald-700">
+                                        <CheckCircle className="w-4 h-4 text-emerald-500" /> Dispatch Success:
+                                      </div>
+                                      <span className="text-xs whitespace-pre-wrap">{log.errorDetails || 'SMS Submitted Successfully.'}</span>
                                     </span>
                                   ) : (
                                     <span className="block">
-                                      <div className="font-bold flex items-center gap-1.5 mb-1.5 text-red-650">
+                                      <div className="font-bold flex items-center gap-1.5 mb-1.5 text-red-600">
                                         <XCircle className="w-4 h-4 text-red-500" /> Dispatch Failure:
                                       </div>
                                       <span className="text-xs whitespace-pre-wrap">{log.errorDetails || 'Connection handshake timed out or returned no response body.'}</span>

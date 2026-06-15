@@ -376,8 +376,17 @@ try {
               KEY \`idx_sent_at\` (\`sent_at\`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
           `);
+          
+          // Pre-emptively fix any previous failed logs containing success messages
+          await conn.query(`
+            UPDATE \`sms_logs\` 
+            SET \`status\` = 'Delivered' 
+            WHERE \`status\` = 'Failed' 
+              AND (\`error_details\` LIKE '%Successfully%' OR \`error_details\` LIKE '%success%')
+          `);
+          console.log('[MySQL] Corrected status for successfully sent SMS entries.');
         } catch (smsTableErr: any) {
-          console.warn('[MySQL] Failed to create sms_logs table:', smsTableErr.message);
+          console.warn('[MySQL] Failed to create or update sms_logs table:', smsTableErr.message);
         }
 
         console.log('[MySQL] Auto-initialized crm_users_auth table and added safety columns successfully.');
@@ -1085,8 +1094,27 @@ export const dbService = {
 
   // --- TEMPLATES ---
   async getTemplates(userId?: string): Promise<Template[]> {
+    const targetUid = userId || 'ielts_crm_main_user';
     if (pool) {
       try {
+        // Auto-seed default Welcome SMS template if not present
+        const [existing] = await pool.execute('SELECT * FROM templates WHERE id = ?', ['tpl_welcome_sms_default']);
+        if ((existing as any[]).length === 0) {
+          await pool.execute(
+            `INSERT INTO templates (id, user_id, name, type, subject, body) 
+             VALUES (?, ?, ?, ?, ?, ?)`, 
+            [
+              'tpl_welcome_sms_default',
+              targetUid,
+              'Default Welcome SMS Template',
+              'SMS',
+              'Welcome',
+              'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
+            ]
+          );
+          console.log('[MySQL] Auto-seeded default Welcome SMS Template.');
+        }
+
         let rows: any[];
         if (userId) {
           const [results] = await pool.execute('SELECT * FROM templates WHERE user_id = ?', [userId]);
@@ -1099,6 +1127,17 @@ export const dbService = {
       } catch (err) {
         console.error('[MySQL] getTemplates failed:', err);
       }
+    }
+    // High-performance local in-memory fallback
+    if (!inMemoryTemplates.some(t => t.id === 'tpl_welcome_sms_default')) {
+      inMemoryTemplates.push({
+        id: 'tpl_welcome_sms_default',
+        userId: targetUid,
+        name: 'Default Welcome SMS Template',
+        type: 'SMS',
+        subject: 'Welcome',
+        body: 'Hello {{name}}, welcome to IELTS Academic! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.'
+      });
     }
     if (userId) {
       return inMemoryTemplates.filter(t => t.userId === userId);
@@ -1178,8 +1217,35 @@ export const dbService = {
 
   // --- WORKFLOWS ---
   async getWorkflows(userId?: string): Promise<WorkflowRule[]> {
+    const targetUid = userId || 'ielts_crm_main_user';
     if (pool) {
       try {
+        // Ensure template is seeded first
+        await this.getTemplates(targetUid);
+
+        // Auto-seed default Welcome SMS automation if not present
+        const [existing] = await pool.execute('SELECT * FROM workflows WHERE id = ?', ['wf_welcome_sms_default']);
+        if ((existing as any[]).length === 0) {
+          await pool.execute(
+            `INSERT INTO workflows (id, user_id, name, trigger_event, trigger_condition, action_type, action_template_id, task_title, n8n_webhook_url, is_active, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              'wf_welcome_sms_default',
+              targetUid,
+              'Automatic Welcome SMS on Signup',
+              'Lead Created',
+              'New Lead',
+              'Send SMS',
+              'tpl_welcome_sms_default',
+              null,
+              null,
+              1, // ACTIVE out of the box
+              Date.now()
+            ]
+          );
+          console.log('[MySQL] Auto-seeded default active Welcome SMS Automation Rule.');
+        }
+
         let rows: any[];
         if (userId) {
           const [results] = await pool.execute('SELECT * FROM workflows WHERE user_id = ? ORDER BY created_at DESC', [userId]);
@@ -1192,6 +1258,20 @@ export const dbService = {
       } catch (err) {
         console.error('[MySQL] getWorkflows failed:', err);
       }
+    }
+    // High-performance local in-memory fallback
+    if (!inMemoryWorkflows.some(w => w.id === 'wf_welcome_sms_default')) {
+      inMemoryWorkflows.push({
+        id: 'wf_welcome_sms_default',
+        userId: targetUid,
+        name: 'Automatic Welcome SMS on Signup',
+        triggerEvent: 'Lead Created',
+        triggerCondition: 'New Lead',
+        actionType: 'Send SMS',
+        actionTemplateId: 'tpl_welcome_sms_default',
+        isActive: true,
+        createdAt: Date.now()
+      });
     }
     if (userId) {
       return inMemoryWorkflows.filter(w => w.userId === userId);

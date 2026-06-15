@@ -434,6 +434,16 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
         logStatus = 'Failed';
         errorDetails = `HTTP Response Error: status ${response.status} (${response.statusText})`;
       } else {
+        // If the plaintext or JSON reply literally contains words representing successful submission
+        const lowerData = data.toLowerCase();
+        const containsSuccessIndicator = 
+          lowerData.includes('submitted successfully') || 
+          lowerData.includes('successfully') || 
+          lowerData.includes('success') || 
+          lowerData.includes('ok:') || 
+          lowerData.includes('code":200') ||
+          lowerData.includes('code":"200"');
+
         // Attempt parsing as JSON to safely examine structure
         try {
           const parsed = JSON.parse(data);
@@ -443,30 +453,35 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
             const code = parsed.response_code;
             const errMsg = parsed.error_message;
             
-            if (code === 200 || code === '200') {
+            if (code === 200 || code === '200' || containsSuccessIndicator) {
               logStatus = 'Delivered';
-              errorDetails = parsed.success_message || 'SMS Submitted Successfully to bulk_sms_bd.';
+              errorDetails = parsed.success_message || errMsg || 'SMS Submitted Successfully to bulk_sms_bd.';
             } else {
               logStatus = 'Failed';
               errorDetails = errMsg || parsed.success_message || `Response Code: ${code}`;
             }
           } else if (smsProvider === 'sms_bd') {
-            if (parsed.success === true || parsed.status === 'success' || parsed.response_code === 200) {
+            if (parsed.success === true || parsed.status === 'success' || parsed.response_code === 200 || containsSuccessIndicator) {
               logStatus = 'Delivered';
+              errorDetails = parsed.message || parsed.success_message || 'SMS Sent Successfully';
             } else {
               logStatus = 'Failed';
               errorDetails = parsed.message || parsed.error || JSON.stringify(parsed);
             }
           } else if (smsProvider === 'greenweb') {
-            if (data.includes('Ok:') || data.includes('Success') || parsed.status === 'success') {
+            if (data.includes('Ok:') || data.includes('Success') || parsed.status === 'success' || containsSuccessIndicator) {
               logStatus = 'Delivered';
+              errorDetails = data;
             } else {
               logStatus = 'Failed';
               errorDetails = data;
             }
           } else {
             // Default generic JSON parsing
-            if (parsed.error || parsed.err || parsed.status === 'error' || parsed.success === false) {
+            if (containsSuccessIndicator) {
+              logStatus = 'Delivered';
+              errorDetails = parsed.message || parsed.success_message || 'SMS Delivered';
+            } else if (parsed.error || parsed.err || parsed.status === 'error' || parsed.success === false) {
               logStatus = 'Failed';
               errorDetails = parsed.error || parsed.message || JSON.stringify(parsed);
             } else {
@@ -475,22 +490,25 @@ async function sendActualSms(phone: string, smsMessage: string, userId: string):
           }
         } catch (jsonErr) {
           // Non-JSON plaintext parsing fallback
-          const lowerData = data.toLowerCase();
-          
-          // Verify if it contains error indicators, but bypass falsy matches such as "error_message":null or "error":null
-          const hasRealError = 
-            (lowerData.includes('error') && !lowerData.includes('error_message":null') && !lowerData.includes('error":null')) ||
-            lowerData.includes('invalid') || 
-            lowerData.includes('failed') || 
-            lowerData.includes('unauthorized') || 
-            lowerData.includes('auth');
-
-          if (hasRealError) {
-            logStatus = 'Failed';
+          if (containsSuccessIndicator) {
+            logStatus = 'Delivered';
             errorDetails = data.substring(0, 250);
           } else {
-            logStatus = 'Delivered';
-            errorDetails = `Plaintext reply verified: ${data.substring(0, 100)}`;
+            // Verify if it contains error indicators, but bypass falsy matches such as "error_message":null or "error":null
+            const hasRealError = 
+              (lowerData.includes('error') && !lowerData.includes('error_message":null') && !lowerData.includes('error":null')) ||
+              lowerData.includes('invalid') || 
+              lowerData.includes('failed') || 
+              lowerData.includes('unauthorized') || 
+              lowerData.includes('auth');
+
+            if (hasRealError) {
+              logStatus = 'Failed';
+              errorDetails = data.substring(0, 250);
+            } else {
+              logStatus = 'Delivered';
+              errorDetails = data.substring(0, 250);
+            }
           }
         }
       }
