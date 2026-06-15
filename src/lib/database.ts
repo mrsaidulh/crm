@@ -1148,7 +1148,7 @@ export const dbService = {
         name: 'Zoom Live Class Invitation SMS Template',
         type: 'SMS',
         subject: 'Zoom Class Info',
-        body: 'Hello {{name}}, your IELTS live Zoom class for {{targetcourse}} is scheduled today. Zoom URL: https://zoom.us/j/9991234567 | Meeting ID: 999 123 4567 | Password: IELTS2026. Please log in on time!'
+        body: 'Hello {{name}}, your IELTS Revolution live Zoom class for {{targetcourse}} is scheduled today. Zoom URL: https://zoom.us/j/9991234567 | Meeting ID: 999 123 4567 | Password: IELTS2026. Please log in on time!'
       },
       {
         id: `tpl_payment_urgent_sms_${targetUid}`,
@@ -1161,17 +1161,29 @@ export const dbService = {
       {
         id: `tpl_mock_test_zoom_sms_${targetUid}`,
         userId: targetUid,
-        name: 'IELTS Mock Test Zoom Class SMS Template',
+        name: 'IELTS Revolution Mock Test Zoom Class SMS Template',
         type: 'SMS',
         subject: 'Live Mock Test Info',
-        body: 'Hi {{name}}, your IELTS Full length Mock Test Zoom Class is scheduled today. Zoom URL: https://zoom.us/j/8887654321 | ID: 888 765 4321 | Pass: IELTSMOCK. Get ready with writing materials!'
+        body: 'Hi {{name}}, your IELTS Revolution Full length Mock Test Zoom Class is scheduled today. Zoom URL: https://zoom.us/j/8887654321 | ID: 888 765 4321 | Pass: IELTSMOCK. Get ready with writing materials!'
       }
     ];
 
     // Combine current user rows/memory-entries with the dynamic system presets
     const combined: Template[] = [...baseTemplates];
     for (const sysTpl of systemTemplates) {
-      if (!combined.some(t => t.id === sysTpl.id)) {
+      const idx = combined.findIndex(t => t.id === sysTpl.id);
+      if (idx !== -1) {
+        // If template already exists but has outdated content / generic brand name, update it
+        if (combined[idx].body !== sysTpl.body || combined[idx].name !== sysTpl.name) {
+          combined[idx] = { ...combined[idx], name: sysTpl.name, body: sysTpl.body };
+          if (pool) {
+            pool.execute(
+              `UPDATE templates SET name = ?, body = ? WHERE id = ?`,
+              [sysTpl.name, sysTpl.body, sysTpl.id]
+            ).catch((e: any) => console.log('[MySQL] Auto-seed background update error (ignoring):', e.message));
+          }
+        }
+      } else {
         // Asynchronously populate into database so they persist natively
         if (pool) {
           pool.execute(
