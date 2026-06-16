@@ -31,6 +31,7 @@ import {
   MessageSquare,
   Smartphone,
   Send,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
 import type { Lead, LeadStatus, LeadSource } from "../types";
@@ -50,6 +51,8 @@ export default function LeadsView() {
   const [sourceFilter, setSourceFilter] = useState<string>("All");
   const [countryFilter, setCountryFilter] = useState<string>("All");
   const [tagFilter, setTagFilter] = useState<string>("All");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("createdAt-desc");
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -1589,6 +1592,22 @@ export default function LeadsView() {
     const matchesTag =
       tagFilter === "All" || (lead.tags && lead.tags.includes(tagFilter));
 
+    const matchesDateRange = (() => {
+      if (!startDateFilter && !endDateFilter) return true;
+      const leadTime = new Date(lead.createdAt).getTime();
+      if (isNaN(leadTime)) return true;
+
+      if (startDateFilter) {
+        const start = new Date(startDateFilter + "T00:00:00").getTime();
+        if (!isNaN(start) && leadTime < start) return false;
+      }
+      if (endDateFilter) {
+        const end = new Date(endDateFilter + "T23:59:59").getTime();
+        if (!isNaN(end) && leadTime > end) return false;
+      }
+      return true;
+    })();
+
     if (showDuplicatesOnly) {
       const email = lead.email?.trim().toLowerCase();
       const phone = lead.phone?.trim().replace(/[\s-]/g, "");
@@ -1604,7 +1623,8 @@ export default function LeadsView() {
       matchesStatus &&
       matchesSource &&
       matchesCountry &&
-      matchesTag
+      matchesTag &&
+      matchesDateRange
     );
   });
 
@@ -1797,7 +1817,7 @@ export default function LeadsView() {
               </select>
             </div>
 
-            {/* Tag / Category Filter */}
+             {/* Tag / Category Filter */}
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all">
               <Tag className="w-4 h-4 text-indigo-500" />
               <select
@@ -1812,6 +1832,41 @@ export default function LeadsView() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Custom Date Range Filter */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all text-xs">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-1 font-medium text-slate-700">
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  className="bg-transparent border-none text-slate-700 focus:outline-none cursor-pointer p-0 font-semibold leading-none select-none w-26 text-[11px]"
+                  title="Start Date"
+                />
+                <span className="text-slate-300 font-bold select-none px-0.5">to</span>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  className="bg-transparent border-none text-slate-700 focus:outline-none cursor-pointer p-0 font-semibold leading-none select-none w-26 text-[11px]"
+                  title="End Date"
+                />
+              </div>
+              {(startDateFilter !== "" || endDateFilter !== "") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDateFilter("");
+                    setEndDateFilter("");
+                  }}
+                  className="ml-1 text-slate-400 hover:text-red-500 font-bold hover:scale-110 transition-transform cursor-pointer"
+                  title="Clear Date Range"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Diagnostics / Duplicates Filter */}
@@ -1852,6 +1907,8 @@ export default function LeadsView() {
           sourceFilter !== "All" ||
           countryFilter !== "All" ||
           tagFilter !== "All" ||
+          startDateFilter !== "" ||
+          endDateFilter !== "" ||
           showDuplicatesOnly) && (
           <div className="bg-amber-50/30 border-b border-amber-100/50 px-4 py-2 flex flex-wrap gap-2 items-center text-xs text-slate-600 justify-between animate-in slide-in-from-top-1 duration-200">
             <div className="flex items-center flex-wrap gap-1.5">
@@ -1918,6 +1975,21 @@ export default function LeadsView() {
                   />
                 </span>
               )}
+              {(startDateFilter !== "" || endDateFilter !== "") && (
+                <span className="bg-white border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
+                  Date Range:{" "}
+                  <strong className="text-slate-900 font-semibold text-[10px]">
+                    {startDateFilter || "..."} to {endDateFilter || "..."}
+                  </strong>
+                  <X
+                    className="w-3 h-3 hover:text-red-500 cursor-pointer ml-0.5"
+                    onClick={() => {
+                      setStartDateFilter("");
+                      setEndDateFilter("");
+                    }}
+                  />
+                </span>
+              )}
               {showDuplicatesOnly && (
                 <span className="bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-3xs">
                   <strong>Duplicates Only</strong>
@@ -1935,6 +2007,8 @@ export default function LeadsView() {
                 setSourceFilter("All");
                 setCountryFilter("All");
                 setTagFilter("All");
+                setStartDateFilter("");
+                setEndDateFilter("");
                 setShowDuplicatesOnly(false);
               }}
               className="text-xs text-indigo-600 hover:text-indigo-850 font-bold hover:underline transition-all cursor-pointer underline-offset-2 ml-auto"

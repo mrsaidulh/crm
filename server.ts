@@ -769,7 +769,7 @@ app.post(['/api/leads', '/leads'], async (req, res) => {
     bodyCopy.targetBand = String(bodyCopy.targetBand || '7.0').trim();
     bodyCopy.destination = String(bodyCopy.destination || 'United Kingdom').trim();
     bodyCopy.source = String(bodyCopy.source || 'Website Form').trim();
-    bodyCopy.status = String(bodyCopy.status || 'New').trim();
+    bodyCopy.status = String(bodyCopy.status || 'New Lead').trim();
 
     if (bodyCopy.phone) {
       let phoneCleaned = String(bodyCopy.phone).replace(/[\s-]/g, '');
@@ -990,8 +990,10 @@ app.post('/api/campaigns/sms', async (req, res) => {
       if (cleanAudience === 'Enrolled Students') return status === 'Enrolled';
       if (cleanAudience === 'Discarded Leads') return status === 'Discarded';
 
-      // Fallback matching: if the lead's name or email or phone is equal to audience
-      if (lead.phone === cleanAudience || lead.id === cleanAudience || lead.name === cleanAudience) {
+      // Fallback matching: if the lead's name or email or phone is equal to audience (normalizing phone digits to avoid format mismatches)
+      const cleanLeadPhone = lead.phone ? String(lead.phone).replace(/[^0-9]/g, '') : '';
+      const cleanAudDigits = cleanAudience.replace(/[^0-9]/g, '');
+      if ((cleanLeadPhone && cleanAudDigits && cleanLeadPhone === cleanAudDigits) || lead.phone === cleanAudience || lead.id === cleanAudience || lead.name === cleanAudience) {
         return true;
       }
       return false;

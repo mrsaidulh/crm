@@ -642,7 +642,7 @@ export default function PublicForm() {
 
       const leadData = {
         ...cleanData,
-        status: "New" as LeadStatus,
+        status: "New Lead" as LeadStatus,
         userId: userId,
         phoneVerified: true,
         tags: finalTags.length > 0 ? finalTags : undefined,
@@ -675,7 +675,7 @@ export default function PublicForm() {
         triggerWorkflowAutomations(
           userId,
           "Lead Created",
-          "New",
+          "New Lead",
           finalizedLead,
         );
         triggerWorkflowAutomations(
