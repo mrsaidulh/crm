@@ -541,7 +541,7 @@ export default function PublicForm() {
       const response = await fetch("/api/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanedData.phone }),
+        body: JSON.stringify({ phone: cleanedData.phone, userId: userId }),
       });
 
       const data = await response.json();
@@ -594,7 +594,7 @@ export default function PublicForm() {
       const response = await fetch("/api/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: formData.phone, code: otpCode }),
+        body: JSON.stringify({ phone: formData.phone, code: otpCode, userId: userId }),
       });
 
       const data = await response.json();

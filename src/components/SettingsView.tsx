@@ -386,15 +386,6 @@ function LiveSmsTestBlock({ settings }: { settings: UserSettings }) {
     }
   };
 
-  // Perform a silent / auto heartbeat check when settings are loaded or changed
-  useEffect(() => {
-    if (settings.smsApiKey) {
-      handleTestConnection();
-    } else {
-      setTestResult(null);
-    }
-  }, [settings.smsApiKey, settings.smsProvider, settings.smsSenderId, settings.smsApiUrl]);
-
   return (
     <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 mt-3 space-y-3">
       <div className="flex items-center justify-between">

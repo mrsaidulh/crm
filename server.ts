@@ -569,7 +569,8 @@ const activeOtps = new Map<string, { code: string; expiresAt: number }>();
 
 // POST /api/otp/send (also aliased on root /otp/send)
 app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
-  const { phone } = req.body;
+  const { phone, userId } = req.body;
+  const targetUserId = userId || 'ielts_crm_main_user';
   
   if (!phone) {
     return res.status(400).json({ error: 'Phone number is required' });
@@ -583,9 +584,9 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 
   const smsMessage = `Your IELTS Revolution OTP is ${otpCode} and will expire in 5 minutes. Visit https://course.ieltsrevolution.com/ for more details.`;
 
-  console.log(`[OTP] Generated OTP for ${phone}: ${otpCode}`);
+  console.log(`[OTP] Generated OTP for ${phone}: ${otpCode} (user: ${targetUserId})`);
 
-  const runResult = await sendActualSms(phone, smsMessage, 'ielts_crm_main_user');
+  const runResult = await sendActualSms(phone, smsMessage, targetUserId);
 
   if (runResult.provider !== 'Simulation') {
     return res.json({ 
@@ -603,7 +604,8 @@ app.post(['/api/otp/send', '/otp/send'], async (req, res) => {
 
 // POST /api/otp/verify (also aliased on root /otp/verify)
 app.post(['/api/otp/verify', '/otp/verify'], async (req, res) => {
-  const { phone, code } = req.body;
+  const { phone, code, userId } = req.body;
+  const targetUserId = userId || 'ielts_crm_main_user';
 
   if (!phone || !code) {
     return res.status(400).json({ error: 'Phone number and verification code are required' });
@@ -629,7 +631,7 @@ app.post(['/api/otp/verify', '/otp/verify'], async (req, res) => {
 
   // Find and update matching leads in database
   try {
-    const list = await dbService.getLeads('ielts_crm_main_user');
+    const list = await dbService.getLeads(targetUserId);
     let targetClean = phone.replace(/[^0-9]/g, '');
     if (targetClean.startsWith('01') && targetClean.length === 11) {
       targetClean = '88' + targetClean;
@@ -786,6 +788,48 @@ app.post(['/api/leads', '/leads'], async (req, res) => {
       createdAt: req.body.createdAt || Date.now()
     };
     await dbService.insertLead(newLead);
+
+    // Welcome SMS Trigger (highly reliable, server-side!)
+    if (newLead.phoneVerified && newLead.phone) {
+      try {
+        const uId = newLead.userId || 'ielts_crm_main_user';
+        
+        // Use default welcome message content
+        const defaultBody = 'Hello {{name}}, welcome to IELTS Revolution! We have successfully received your registration details. A counselor will connect with you soon regarding your interest in {{targetcourse}}.';
+        
+        let smsBody = defaultBody;
+        
+        // Let's try to load custom active template if available
+        try {
+          const templates = await dbService.getTemplates(uId);
+          const uTemplate = templates.find((t: any) => t.id === 'tpl_welcome_sms_default' || String(t.id).includes('welcome') || String(t.name).toLowerCase().includes('welcome'));
+          if (uTemplate && uTemplate.body) {
+            smsBody = uTemplate.body;
+            console.log(`[Welcome SMS] Custom Welcome template in DB loaded: "${uTemplate.name}"`);
+          }
+        } catch (tplErr) {
+          console.warn('[Welcome SMS] Failed fetching template, using standard default template.', tplErr);
+        }
+
+        // Merge variables elegantly
+        const bodyMerged = smsBody
+          .replace(/\{\{\s*name\s*\}\}/gi, newLead.name || '')
+          .replace(/\{\{\s*email\s*\}\}/gi, newLead.email || '')
+          .replace(/\{\{\s*phone\s*\}\}/gi, newLead.phone || '')
+          .replace(/\{\{\s*course\s*\}\}/gi, newLead.targetCourse || 'IELTS Revolution')
+          .replace(/\{\{\s*targetcourse\s*\}\}/gi, newLead.targetCourse || 'IELTS Revolution')
+          .replace(/\{\{\s*band\s*\}\}/gi, newLead.targetBand || '7.0')
+          .replace(/\{\{\s*targetband\s*\}\}/gi, newLead.targetBand || '7.0')
+          .replace(/\{\{\s*country\s*\}\}/gi, newLead.destination || 'United Kingdom')
+          .replace(/\{\{\s*destination\s*\}\}/gi, newLead.destination || 'United Kingdom');
+
+        console.log(`[Welcome SMS] Dispatching welcome notification (server-side) to ${newLead.phone} for Lead "${newLead.name}"`);
+        const runResult = await sendActualSms(newLead.phone, bodyMerged, uId);
+        console.log(`[Welcome SMS Result] Success: ${runResult.success}, Provider: ${runResult.provider}, Status: ${runResult.status}`);
+      } catch (welcomeErr) {
+        console.error('[Welcome SMS] Failed to trigger server-side Welcome SMS:', welcomeErr);
+      }
+    }
 
     // Meta Conversions API Event Trigger
     try {

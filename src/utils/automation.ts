@@ -347,6 +347,7 @@ export async function triggerWorkflowAutomations(
                 audience: payload.phone || payload.name,
                 message: bodyMerged,
                 userId: userId,
+                recipientPhones: payload.phone ? [payload.phone] : [],
               }),
             });
 
