@@ -16,7 +16,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   logOut: () => Promise<void>;
-  updateProfile: (displayName: string, email: string, password?: string) => Promise<void>;
+  updateProfile: (displayName: string, email: string, password?: string, role?: string) => Promise<void>;
   isSuperAdmin: boolean;
   toggleTwoFactor: (enabled: boolean, secret?: string) => Promise<void>;
 }
@@ -322,7 +322,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const updateProfile = async (displayName: string, email: string, password?: string) => {
+  const updateProfile = async (displayName: string, email: string, password?: string, role?: string) => {
     if (!user) throw new Error('Not logged in.');
 
     const savedUsersStr = localStorage.getItem('crm_users_db') || '[]';
@@ -339,7 +339,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...u,
           displayName,
           email,
-          ...(password ? { password } : {})
+          ...(password ? { password } : {}),
+          ...(role ? { role } : {})
         };
 
         // Push update to server
@@ -360,7 +361,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       uid: user.uid,
       email: email,
       displayName: displayName,
-      role: user.role
+      role: role || user.role
     };
 
     localStorage.setItem('crm_active_session', JSON.stringify(updatedSession));

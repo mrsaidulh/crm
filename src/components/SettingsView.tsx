@@ -506,6 +506,19 @@ export default function SettingsView() {
     reminder: { status: 'idle' }
   });
 
+  // Role-based notification condition states
+  const [notifyEvent, setNotifyEvent] = useState<'lead_created' | 'status_changed' | 'task_assigned' | 'audit_warning' | 'high_priority_lead'>('lead_created');
+  const [notifyRoles, setNotifyRoles] = useState<string[]>(['Super Admin', 'Admin']);
+  const [notifyChannel, setNotifyChannel] = useState<'email' | 'sms' | 'both'>('both');
+
+  const defaultNotificationRules = [
+    { id: 'rule_1', event: 'lead_created' as const, roles: ['Super Admin', 'Admin', 'Marketing'], channel: 'email' as const, isActive: true },
+    { id: 'rule_2', event: 'high_priority_lead' as const, roles: ['Super Admin', 'Admin'], channel: 'both' as const, isActive: true },
+    { id: 'rule_3', event: 'status_changed' as const, roles: ['Sales Rep', 'Counselor'], channel: 'sms' as const, isActive: true },
+    { id: 'rule_4', event: 'task_assigned' as const, roles: ['Counselor', 'Teacher'], channel: 'email' as const, isActive: true },
+    { id: 'rule_5', event: 'audit_warning' as const, roles: ['Super Admin', 'Admin'], channel: 'both' as const, isActive: true },
+  ];
+
   const handleTestWebhook = async (type: 'created' | 'status' | 'reminder', url: string | undefined) => {
     if (!url || !url.trim()) {
       alert('Please enter a webhook URL first before sending a test.');
@@ -726,6 +739,7 @@ export default function SettingsView() {
   // Custom Manual Profile state editors
   const [profileName, setProfileName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
+  const [profileRole, setProfileRole] = useState('');
   const [profilePassword, setProfilePassword] = useState('');
   const [profileMessage, setProfileMessage] = useState('');
   const [profileUpdating, setProfileUpdating] = useState(false);
@@ -735,6 +749,7 @@ export default function SettingsView() {
     if (user) {
       setProfileName(user.displayName || '');
       setProfileEmail(user.email || '');
+      setProfileRole(user.role || 'Sales Rep');
     }
   }, [user]);
 
@@ -860,7 +875,7 @@ export default function SettingsView() {
     setProfileUpdating(true);
     setProfileMessage('');
     try {
-      await updateProfile(profileName.trim(), profileEmail.trim(), profilePassword ? profilePassword : undefined);
+      await updateProfile(profileName.trim(), profileEmail.trim(), profilePassword ? profilePassword : undefined, profileRole);
       setProfileMessage('Success: Manual profile updated successfully!');
       setProfilePassword('');
       setTimeout(() => setProfileMessage(''), 3000);
@@ -1080,11 +1095,11 @@ export default function SettingsView() {
                   </div>
                   <div>
                     <div className="text-xs text-slate-500 font-medium">Account Role Privilege</div>
-                    <div className="text-sm font-semibold text-slate-800">Master System Administrator</div>
+                    <div className="text-sm font-semibold text-slate-800">{user?.role || 'Sales Rep'}</div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
                     <input 
@@ -1092,7 +1107,7 @@ export default function SettingsView() {
                       required
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-505 bg-white text-sm"
                       placeholder="e.g. CRM Admin"
                     />
                   </div>
@@ -1103,9 +1118,24 @@ export default function SettingsView() {
                       required
                       value={profileEmail}
                       onChange={(e) => setProfileEmail(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-505 bg-white text-sm"
                       placeholder="e.g. crm@example.com"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Role Privilege Level</label>
+                    <select
+                      value={profileRole}
+                      onChange={(e) => setProfileRole(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-505 bg-white text-sm"
+                    >
+                      <option value="Admin">Admin (Full Access & Setting Privileges)</option>
+                      <option value="Sales Rep">Sales Rep (Restricted and Pipeline Focus)</option>
+                      <option value="Super Admin">Super Admin</option>
+                      <option value="Counselor">Counselor</option>
+                      <option value="Teacher">Teacher</option>
+                      <option value="Marketing">Marketing</option>
+                    </select>
                   </div>
                 </div>
 
@@ -1601,19 +1631,321 @@ export default function SettingsView() {
           )}
 
           {activeTab === 'notifications' && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 border-b border-slate-100 pb-4">
-                Notification Preferences
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm animate-in fade-in space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-indigo-600" />
+                    Notification Routing & Preferences
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Manage real-time communication routing tables to deliver email and SMS updates to specific data-access roles.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Restore standard notification distribution matrix?")) {
+                        setSettings({ ...settings, notificationRules: defaultNotificationRules, emailNotificationsEnabled: true, smsNotificationsEnabled: true });
+                      }
+                    }}
+                    className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reset to Defaults
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setSaving(true);
+                      try {
+                        await fetch('/api/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId: user?.uid, settings })
+                        });
+                        setSaveMessage('Preferences updated successfully!');
+                        setTimeout(() => setSaveMessage(''), 3000);
+                      } catch {
+                        setSaveMessage('Error updating preferences.');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    disabled={saving}
+                    className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm shadow-indigo-100 transition-all cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Preferences'}
+                  </button>
+                </div>
+              </div>
+
+              {saveMessage && (
+                <div className={`p-3 text-xs rounded-xl font-medium border ${
+                  saveMessage.startsWith('Error') 
+                    ? 'bg-rose-50 border-rose-100 text-rose-700' 
+                    : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                } animate-in fade-in slide-in-from-top-1`}>
+                  {saveMessage}
+                </div>
+              )}
+
+              {/* Master Gateway Switches */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      Email Notification Gateway
+                    </h3>
+                    <p className="text-xs text-slate-500">Enable SMTP server routing for authorized event dispatches.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, emailNotificationsEnabled: !settings.emailNotificationsEnabled })}
+                    className={`w-11 h-6 rounded-full transition-colors flex items-center p-1 cursor-pointer ${
+                      settings.emailNotificationsEnabled ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                    }`}
+                  >
+                    <div className="w-4 h-4 bg-white rounded-full shadow-xs"></div>
+                  </button>
+                </div>
+
+                <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      SMS Notification Gateway
+                    </h3>
+                    <p className="text-xs text-slate-500">Enable preconfigured SMS APIs for immediate alert routing.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, smsNotificationsEnabled: !settings.smsNotificationsEnabled })}
+                    className={`w-11 h-6 rounded-full transition-colors flex items-center p-1 cursor-pointer ${
+                      settings.smsNotificationsEnabled ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                    }`}
+                  >
+                    <div className="w-4 h-4 bg-white rounded-full shadow-xs"></div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Notification Routing Matrix */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Role-based Notification Dispatch Conditions
+                </h3>
+
+                <div className="border border-slate-150 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-150 grid grid-cols-12 text-xs font-bold text-slate-600 gap-2">
+                    <div className="col-span-4">Triggering System Event</div>
+                    <div className="col-span-5">Subscribed Role Recipients</div>
+                    <div className="col-span-2">Dispatch Channel</div>
+                    <div className="col-span-1 text-right">Actions</div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 bg-white">
+                    {/* Render active notification routing rules */}
+                    {(settings.notificationRules || defaultNotificationRules).map((rule) => {
+                      const eventLabelMap = {
+                        lead_created: 'New Lead Created',
+                        high_priority_lead: '🔥 Hot Lead Verified',
+                        status_changed: 'Pipeline Stage Moved',
+                        task_assigned: 'New Task Assignment',
+                        audit_warning: '⚠️ Critical Security Audit Action'
+                      };
+
+                      const channelLabelMap = {
+                        email: 'Email Delivery',
+                        sms: 'SMS Text Alert',
+                        both: 'Dual (Email + SMS)'
+                      };
+
+                      return (
+                        <div key={rule.id} className="px-4 py-3.5 grid grid-cols-12 items-center text-sm gap-2 hover:bg-slate-50/40 transition-colors">
+                          <div className="col-span-4 space-y-0.5">
+                            <span className={`inline-flex items-center gap-1.5 font-semibold text-slate-800 text-xs ${!rule.isActive ? 'line-through text-slate-400' : ''}`}>
+                              {eventLabelMap[rule.event] || rule.event}
+                            </span>
+                            {!rule.isActive && (
+                              <span className="text-[10px] text-slate-400 font-medium block">Inactive / Paused</span>
+                            )}
+                          </div>
+                          
+                          <div className="col-span-5 flex flex-wrap gap-1.5">
+                            {rule.roles.map((role) => {
+                              const roleColors: Record<string, string> = {
+                                'Super Admin': 'bg-rose-50 border-rose-100 text-rose-700',
+                                'Admin': 'bg-pink-50 border-pink-100 text-pink-700',
+                                'Sales Rep': 'bg-indigo-50 border-indigo-100 text-indigo-700',
+                                'Counselor': 'bg-amber-50 border-amber-100 text-amber-700',
+                                'Teacher': 'bg-purple-50 border-purple-100 text-purple-700',
+                                'Marketing': 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                              };
+                              const colorClass = roleColors[role] || 'bg-slate-50 border-slate-100 text-slate-700';
+
+                              return (
+                                <span key={role} className={`text-[10px] font-bold px-2 py-0.5 border rounded-md ${colorClass}`}>
+                                  {role}
+                                </span>
+                              );
+                            })}
+                          </div>
+
+                          <div className="col-span-2">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${
+                              rule.channel === 'both' 
+                                ? 'bg-indigo-50 border-indigo-100 text-indigo-700' 
+                                : rule.channel === 'sms' 
+                                ? 'bg-blue-50 border-blue-100 text-blue-700' 
+                                : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                            }`}>
+                              {channelLabelMap[rule.channel] || rule.channel}
+                            </span>
+                          </div>
+
+                          <div className="col-span-1 flex items-center justify-end gap-2 shrink-0">
+                            {/* Inline pause toggle switch */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentRules = settings.notificationRules || defaultNotificationRules;
+                                const updated = currentRules.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r);
+                                setSettings({ ...settings, notificationRules: updated });
+                              }}
+                              className={`w-8 h-4 rounded-full transition-colors flex items-center p-0.5 cursor-pointer ${
+                                rule.isActive ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                              }`}
+                              title={rule.isActive ? 'Pause rule alert routing' : 'Activate rule alert routing'}
+                            >
+                              <div className="w-3 h-3 bg-white rounded-full shadow-xs"></div>
+                            </button>
+
+                            {/* Delete custom rule button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to stop notification alerts for this rule?")) {
+                                  const currentRules = settings.notificationRules || defaultNotificationRules;
+                                  const updated = currentRules.filter(r => r.id !== rule.id);
+                                  setSettings({ ...settings, notificationRules: updated });
+                                }
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors"
+                              title="Delete notification condition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+
+              {/* Form panel to inject complex dynamic notification rules */}
+              <div className="border border-indigo-50 bg-indigo-50/5 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 bg-indigo-50 text-indigo-700 rounded-xl flex items-center justify-center">
+                    <Plus className="w-4 h-4" />
+                  </div>
                   <div>
-                    <h4 className="font-medium text-slate-800 text-sm">Email Notifications</h4>
-                    <p className="text-xs text-slate-500">Receive alerts when new leads are submitted.</p>
+                    <h3 className="text-sm font-semibold text-slate-800">Add New Notification Condition</h3>
+                    <p className="text-xs text-slate-500">Configure triggers and map delivery addresses on specific system activities.</p>
                   </div>
-                  <div className="w-11 h-6 bg-indigo-600 rounded-full flex items-center justify-end p-1 cursor-pointer">
-                    <div className="w-4 h-4 bg-white rounded-full"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
+                  <div className="md:col-span-4 space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">System Source Event Trigger</label>
+                    <select
+                      value={notifyEvent}
+                      onChange={(e) => setNotifyEvent(e.target.value as any)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    >
+                      <option value="lead_created">New Lead Created (Standard Registry)</option>
+                      <option value="high_priority_lead">🔥 Premium/High-Priority Lead Checked</option>
+                      <option value="status_changed">Lead Pipeline Status Moved</option>
+                      <option value="task_assigned">New Task Assignment Event</option>
+                      <option value="audit_warning">⚠️ System Security Audit Warning</option>
+                    </select>
                   </div>
+
+                  <div className="md:col-span-5 space-y-2">
+                    <label className="text-xs font-semibold text-slate-700 block">Recipient Role Target Groups</label>
+                    <div className="flex flex-wrap gap-2 p-1.5 border border-slate-200 rounded-xl bg-white max-h-36 overflow-y-auto">
+                      {['Super Admin', 'Admin', 'Sales Rep', 'Counselor', 'Teacher', 'Marketing'].map((role) => {
+                        const active = notifyRoles.includes(role);
+                        return (
+                          <button
+                            type="button"
+                            key={role}
+                            onClick={() => {
+                              if (active) {
+                                setNotifyRoles(notifyRoles.filter(r => r !== role));
+                              } else {
+                                setNotifyRoles([...notifyRoles, role]);
+                              }
+                            }}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                              active 
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs' 
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-3 space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Preferred Dispatch Channel</label>
+                    <select
+                      value={notifyChannel}
+                      onChange={(e) => setNotifyChannel(e.target.value as any)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    >
+                      <option value="email">Email Notification Only</option>
+                      <option value="sms">SMS Text Alert Only</option>
+                      <option value="both">Both (Email & SMS)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-indigo-50/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (notifyRoles.length === 0) {
+                        alert("Please select at least one subscribed role target class.");
+                        return;
+                      }
+
+                      const newRule = {
+                        id: 'rule_' + Date.now().toString(),
+                        event: notifyEvent,
+                        roles: notifyRoles,
+                        channel: notifyChannel,
+                        isActive: true
+                      };
+
+                      const currentRules = settings.notificationRules || defaultNotificationRules;
+                      setSettings({
+                        ...settings,
+                        notificationRules: [...currentRules, newRule]
+                      });
+
+                      setNotifyRoles(['Super Admin', 'Admin']);
+                    }}
+                    className="px-4 py-2 bg-slate-900 duration-150 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Bind Notification Route
+                  </button>
                 </div>
               </div>
             </div>
@@ -3006,9 +3338,10 @@ export default function SettingsView() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Data Access Role</label>
-                <select required value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value as any})} className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                <select required value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value as any})} className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-505 text-sm bg-white">
                   <option value="Super Admin">Super Admin (Full System & User Management)</option>
                   <option value="Admin">Admin (Full Access & Settings)</option>
+                  <option value="Sales Rep">Sales Rep (Leads overview, Pipeline)</option>
                   <option value="Counselor">Counselor (Leads, Pipeline, Tasks)</option>
                   <option value="Teacher">Teacher (Students, Mock Scores)</option>
                   <option value="Marketing">Marketing (Campaigns, Templates, Forms)</option>

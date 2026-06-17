@@ -31,7 +31,7 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   
-  const { user, loading, signInWithEmail, signUpWithEmail, logOut } = useAuth();
+  const { user, loading, signInWithEmail, signUpWithEmail, logOut, isSuperAdmin } = useAuth();
   const [showCredPassword, setShowCredPassword] = useState(false);
 
   // 2FA Session Verification and Setup States
@@ -477,7 +477,24 @@ export default function App() {
     );
   }
 
+  const AccessDeniedView = ({ requiredRole = 'Admin' }: { requiredRole?: string }) => (
+    <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center max-w-lg mx-auto my-12 animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-100">
+        <ShieldAlert className="w-8 h-8 text-rose-500" />
+      </div>
+      <h2 className="text-lg font-bold text-slate-900 mb-2">Access Denied</h2>
+      <p className="text-slate-500 text-sm leading-relaxed mb-6 font-normal">
+        This view contains sensitive system database logs or security parameters. Standard data privilege policies restrict access to this section. Only users authorized with <strong>{requiredRole}</strong> or higher level roles are permitted to view this data.
+      </p>
+      <div className="text-xs text-slate-400 bg-slate-50 border border-slate-100 rounded-lg py-2 px-3 inline-block font-medium">
+        Standard staff and Sales Representatives are restricted from viewing Security & Admin Logs.
+      </div>
+    </div>
+  );
+
   const renderView = () => {
+    const hasAdminAccess = isSuperAdmin || user?.role === 'Admin';
+
     switch (currentView) {
       case 'dashboard':
         return <Dashboard />;
@@ -502,29 +519,40 @@ export default function App() {
       case 'settings':
         return <SettingsView />;
       case 'audit':
-        return <AuditLogsView />;
+        return hasAdminAccess ? <AuditLogsView /> : <AccessDeniedView requiredRole="Admin" />;
       case 'sms-logs':
-        return <SmsLogsView />;
+        return hasAdminAccess ? <SmsLogsView /> : <AccessDeniedView requiredRole="Admin" />;
     }
   };
 
-  const NavItem = ({ view, icon, label }: { view: View, icon: React.ReactNode, label: string }) => (
-    <button
-      onClick={() => {
-        setCurrentView(view);
-        setSidebarOpen(false);
-      }}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-        currentView === view
-          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-          : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900'
-      }`}
-    >
-      {icon}
-      <span className="font-medium text-sm">{label}</span>
-      {currentView === view && <ChevronRight className="w-4 h-4 ml-auto opacity-70" />}
-    </button>
-  );
+  const NavItem = ({ view, icon, label, adminOnly }: { view: View, icon: React.ReactNode, label: string, adminOnly?: boolean }) => {
+    const isRestricted = adminOnly && !(isSuperAdmin || user?.role === 'Admin');
+
+    return (
+      <button
+        onClick={() => {
+          setCurrentView(view);
+          setSidebarOpen(false);
+        }}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+          currentView === view
+            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+            : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900'
+        }`}
+      >
+        {icon}
+        <span className="font-medium text-sm flex items-center gap-1.5 flex-1 min-w-0">
+          <span className="truncate">{label}</span>
+          {isRestricted && (
+            <span className="bg-amber-50 text-amber-600 border border-amber-200 rounded text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 ml-auto flex items-center gap-0.5 shrink-0">
+              <Lock className="w-2.5 h-2.5" /> Locked
+            </span>
+          )}
+        </span>
+        {currentView === view && <ChevronRight className="w-4 h-4 ml-auto opacity-70 shrink-0" />}
+      </button>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
@@ -600,8 +628,8 @@ export default function App() {
               Security & Admin
             </div>
             <nav className="px-4 space-y-1">
-              <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" />
-              <NavItem view="sms-logs" icon={<History className="w-5 h-5" />} label="SMS Delivery Logs" />
+              <NavItem view="audit" icon={<ShieldCheck className="w-5 h-5" />} label="Security Audit Logs" adminOnly />
+              <NavItem view="sms-logs" icon={<History className="w-5 h-5" />} label="SMS Delivery Logs" adminOnly />
             </nav>
           </div>
         </div>

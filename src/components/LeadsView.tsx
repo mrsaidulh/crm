@@ -56,6 +56,7 @@ export default function LeadsView() {
   const [sortBy, setSortBy] = useState<string>("createdAt-desc");
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [hasSetDefaultDates, setHasSetDefaultDates] = useState(false);
 
   // Row Expansion States
   const [expandedLeadIds, setExpandedLeadIds] = useState<string[]>([]);
@@ -799,6 +800,32 @@ export default function LeadsView() {
       .then((data) => {
         if (data && data.leads) {
           setLeads(data.leads);
+          if (!hasSetDefaultDates && data.leads.length > 0) {
+            const validLeads = data.leads.filter((l: any) => l.createdAt);
+            if (validLeads.length > 0) {
+              const oldestLead = validLeads.reduce((oldest: any, current: any) => {
+                const curTime = new Date(current.createdAt).getTime();
+                const oldTime = new Date(oldest.createdAt).getTime();
+                return curTime < oldTime ? current : oldest;
+              }, validLeads[0]);
+              
+              const oldestDate = new Date(oldestLead.createdAt);
+              const oldestYear = oldestDate.getFullYear();
+              const oldestMonth = String(oldestDate.getMonth() + 1).padStart(2, "0");
+              const oldestDay = String(oldestDate.getDate()).padStart(2, "0");
+              const oldestDateString = `${oldestYear}-${oldestMonth}-${oldestDay}`;
+
+              const today = new Date();
+              const todayYear = today.getFullYear();
+              const todayMonth = String(today.getMonth() + 1).padStart(2, "0");
+              const todayDay = String(today.getDate()).padStart(2, "0");
+              const todayString = `${todayYear}-${todayMonth}-${todayDay}`;
+              
+              setStartDateFilter(oldestDateString);
+              setEndDateFilter(todayString);
+              setHasSetDefaultDates(true);
+            }
+          }
         }
       })
       .catch((error) => {
@@ -807,7 +834,7 @@ export default function LeadsView() {
       .finally(() => {
         setLoading(false);
       });
-  }, [userId]);
+  }, [userId, hasSetDefaultDates]);
 
   useEffect(() => {
     const detectCode = async () => {
@@ -1835,8 +1862,8 @@ export default function LeadsView() {
             </div>
 
             {/* Custom Date Range Filter */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl shadow-xs hover:border-slate-350 transition-all text-xs">
-              <Calendar className="w-4 h-4 text-slate-400" />
+            <div className="flex items-center gap-2 bg-indigo-50/40 px-3 py-1.5 border border-indigo-200 rounded-xl shadow-xs hover:border-indigo-350 hover:bg-white transition-all text-xs focus-within:ring-2 focus-within:ring-indigo-100">
+              <Calendar className="w-4 h-4 text-indigo-500" />
               <div className="flex items-center gap-1 font-medium text-slate-700">
                 <input
                   type="date"

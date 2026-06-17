@@ -607,6 +607,19 @@ export default function Dashboard() {
     }
   };
 
+  const stageColorMap: Record<string, { hex: string, bgClass: string, textClass: string }> = {
+    'New Lead': { hex: '#6366f1', bgClass: 'bg-indigo-500', textClass: 'text-indigo-600' },
+    'Contact': { hex: '#3b82f6', bgClass: 'bg-blue-500', textClass: 'text-blue-600' },
+    'Follow-up Required': { hex: '#f59e0b', bgClass: 'bg-amber-500', textClass: 'text-amber-600' },
+    'Consultation Booked': { hex: '#8b5cf6', bgClass: 'bg-purple-500', textClass: 'text-purple-600' },
+    'Counseling Done': { hex: '#06b6d4', bgClass: 'bg-cyan-500', textClass: 'text-cyan-600' },
+    'Demo Class Booked': { hex: '#ec4899', bgClass: 'bg-pink-500', textClass: 'text-pink-600' },
+    'Payment Pending': { hex: '#f43f5e', bgClass: 'bg-rose-500', textClass: 'text-rose-600' },
+    'Re-engagement Offer': { hex: '#7c3aed', bgClass: 'bg-violet-600', textClass: 'text-violet-600' },
+    'Enrolled': { hex: '#10b981', bgClass: 'bg-emerald-500', textClass: 'text-emerald-600' },
+    'Discarded': { hex: '#94a3b8', bgClass: 'bg-slate-400', textClass: 'text-slate-500' }
+  };
+
   const COLORS = ['#11347a', '#10b981', '#f59e0b', '#e31837', '#8b5cf6', '#0ea5e9', '#64748b'];
 
   return (
@@ -791,6 +804,98 @@ export default function Dashboard() {
         <StatCard index={3} title="New Leads" value={stats.newLeads} icon={<UserPlus className="w-5 h-5" />} color="text-indigo-600" bg="bg-indigo-100" />
         <StatCard index={4} title="Enrolled" value={stats.enrolled} icon={<CheckCircle className="w-5 h-5" />} color="text-blue-600" bg="bg-blue-100" />
         <StatCard index={5} title="Conversion %" value={`${stats.conversionRate}%`} icon={<TrendingUp className="w-5 h-5" />} color="text-purple-600" bg="bg-purple-100" />
+      </div>
+
+      {/* Dynamic Pipeline Distribution Horizontal Bar Indicator */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></span>
+              Pipeline Stage Distribution Overview
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Live metrics of active audience segments across default stages ({filteredLeads.length} leads matched)
+            </p>
+          </div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
+            Period: <span className="text-indigo-600">{dateRangeOption === 'all' ? 'All Time' : dateRangeOption === 'custom' ? 'Custom' : `Last ${dateRangeOption.replace('days', ' Days')}`}</span>
+          </div>
+        </div>
+
+        {filteredLeads.length > 0 ? (
+          <div className="space-y-5">
+            {/* Horizontal Bar with percentages */}
+            <div className="h-5 w-full rounded-full overflow-hidden flex bg-slate-100/70 shadow-inner border border-slate-100">
+              {stageDistributionData
+                .filter(item => item.count > 0)
+                .map((item) => {
+                  const pct = (item.count / filteredLeads.length) * 100;
+                  const config = stageColorMap[item.stage] || { hex: '#94a3b8', bgClass: 'bg-slate-400' };
+                  return (
+                    <div
+                      key={item.stage}
+                      className={`${config.bgClass} h-full transition-all duration-500 relative group cursor-pointer first:rounded-l-full last:rounded-r-full`}
+                      style={{ width: `${pct}%` }}
+                    >
+                      {pct > 5 && (
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white tracking-tight select-none">
+                          {item.count}
+                        </span>
+                      )}
+                      
+                      {/* Rich custom hover tooltip */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 text-white text-[11px] py-2 px-3 rounded-xl shadow-lg z-50 whitespace-nowrap border border-slate-800 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <span className={`w-2.5 h-2.5 rounded-full ${config.bgClass}`}></span>
+                          {item.stage}
+                        </div>
+                        <div className="text-slate-300 mt-1">
+                          Count: <span className="font-extrabold text-white">{item.count}</span> <span className="text-slate-600">•</span> {pct.toFixed(1)}%
+                        </div>
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-x-4 border-x-transparent border-t-4 border-t-slate-950"></div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Polished Grid Legend of Stages */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {stageDistributionData.map(item => {
+                const count = item.count;
+                const pct = filteredLeads.length > 0 ? (count / filteredLeads.length) * 100 : 0;
+                const config = stageColorMap[item.stage] || { hex: '#94a3b8', bgClass: 'bg-slate-400', textClass: 'text-slate-600' };
+
+                return (
+                  <div
+                    key={item.stage}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-100/80 transition-all ${
+                      count > 0 ? 'bg-slate-50/50 hover:bg-white hover:shadow-xs hover:border-slate-200' : 'opacity-40 bg-slate-50/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`w-2 h-2 rounded-full ${config.bgClass} shrink-0`}></span>
+                      <span className="text-[11px] font-semibold text-slate-700 truncate" title={item.stage}>
+                        {item.stage}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0 pl-1">
+                      <span className="text-xs font-bold text-slate-900">{count}</span>
+                      <span className="text-[9px] text-slate-400 font-bold block leading-none mt-0.5">
+                        {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-slate-400 text-xs">
+            No leads fall within the selected filter range.
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

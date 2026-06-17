@@ -148,6 +148,17 @@ export interface UserSettings {
   
   // Custom CRM API Integration Settings
   crmApiKey?: string;
+
+  // Granular Dynamic Notification Rules Config
+  emailNotificationsEnabled?: boolean;
+  smsNotificationsEnabled?: boolean;
+  notificationRules?: Array<{
+    id: string;
+    event: 'lead_created' | 'status_changed' | 'task_assigned' | 'audit_warning' | 'high_priority_lead';
+    roles: string[];
+    channel: 'email' | 'sms' | 'both';
+    isActive: boolean;
+  }>;
 }
 
 export interface WorkflowRule {
