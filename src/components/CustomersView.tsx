@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Mail, Phone, ExternalLink, ShieldCheck, FileEdit, Calculator, GraduationCap, X, UserSearch, Trash2 } from 'lucide-react';
+import { Mail, Phone, ExternalLink, ShieldCheck, FileEdit, Calculator, GraduationCap, X, UserSearch, Trash2, Download } from 'lucide-react';
 import type { Lead, MockScore } from '../types';
 import { format } from 'date-fns';
 import CustomerProfileModal from './CustomerProfileModal';
@@ -101,15 +101,93 @@ export default function CustomersView() {
     }
   };
 
+  const handleExportCSV = () => {
+    const isAdmin = isSuperAdmin || user?.role === 'Admin';
+    if (!isAdmin) {
+      alert("Access Denied: Only Admins are authorized to download student data reports.");
+      return;
+    }
+    if (customers.length === 0) {
+      alert("No students found in the current list to export.");
+      return;
+    }
+    const headers = [
+      "Name",
+      "Email",
+      "Phone",
+      "Target Course",
+      "Target Band",
+      "Destination",
+      "Latest Mock Test (Overall)",
+      "Listening Score",
+      "Reading Score",
+      "Writing Score",
+      "Speaking Score",
+      "Lead Score",
+      "Lead Status",
+      "Enrolled At",
+    ];
+
+    const rows = customers.map((cust) => {
+      const latestScore = cust.mockScores?.length ? cust.mockScores[cust.mockScores.length - 1] : null;
+      const scoreDetails = calculateLeadScore(cust);
+      return [
+        cust.name,
+        cust.email,
+        cust.phone,
+        cust.targetCourse || "",
+        cust.targetBand || "",
+        cust.destination || "",
+        latestScore ? latestScore.overall.toFixed(1) : "N/A",
+        latestScore ? latestScore.listening.toString() : "N/A",
+        latestScore ? latestScore.reading.toString() : "N/A",
+        latestScore ? latestScore.writing.toString() : "N/A",
+        latestScore ? latestScore.speaking.toString() : "N/A",
+        scoreDetails.score,
+        cust.status || "Enrolled",
+        cust.createdAt ? format(new Date(cust.createdAt), "yyyy-MM-dd HH:mm:ss") : "",
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((e) =>
+        e.map((val) => `"${String(val || "").replace(/"/g, '""')}"`).join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `enrolled_students_report_${format(new Date(), "yyyyMMdd_HHmmss")}.csv`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) return <div className="p-8 text-center text-slate-500 animate-pulse">Loading students...</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-display font-semibold text-slate-900">Student Management</h1>
           <p className="text-slate-500 text-sm mt-1">Manage enrolled students, track mock test scores, and monitor progress.</p>
         </div>
+        {(isSuperAdmin || user?.role === 'Admin') && (
+          <button
+            onClick={handleExportCSV}
+            className="bg-white hover:bg-slate-50 text-indigo-600 hover:text-indigo-805 border border-indigo-200/60 hover:border-indigo-300 px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+            title="Download current enrolled student records as a CSV report"
+          >
+            <Download className="w-4 h-4 text-indigo-500 animate-pulse" />
+            Download CSV
+          </button>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">

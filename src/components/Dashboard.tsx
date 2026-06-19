@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { format, subDays, isSameDay } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList, Clock, ArrowRight, Sparkles, Tag } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, TrendingUp, Phone, Mail, FileText, Smartphone, Calendar, Square, CheckSquare, ClipboardList, Clock, ArrowRight, Sparkles, Tag, Activity, Search, Filter, MessageSquare, Plus, Send, UserCheck, Inbox, ArrowUpRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
 import type { Lead, Stats, Task, AuditLog, LeadStatus, Campaign } from '../types';
 import { logAuditEvent } from '../utils/auditLogger';
+import { calculateLeadScore } from '../utils/scoring';
 import { Server, WifiOff, AlertTriangle, RefreshCw, Key, HelpCircle, AlertCircle, X, Sliders } from 'lucide-react';
 
 function formatDuration(ms: number): string {
@@ -25,6 +26,24 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
+function getRelativeTime(timestamp: number | string | Date): string {
+  if (!timestamp) return 'Unknown';
+  const timeMs = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+  if (isNaN(timeMs)) return 'Unknown';
+  const diffMs = Date.now() - timeMs;
+  if (diffMs < 0) return 'Just now';
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return format(new Date(timeMs), 'MMM d, h:mm a');
+}
+
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -41,6 +60,17 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; config?: any; error?: string } | null>(null);
   const [checkingDb, setCheckingDb] = useState(false);
+
+  // Activity Feed States
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityCategory, setActivityCategory] = useState<'all' | 'lead' | 'task' | 'campaign' | 'system'>('all');
+  const [broadcastText, setBroadcastText] = useState('');
+  const [isPostingBroadcast, setIsPostingBroadcast] = useState(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState('');
+
+  // Due Soon Follow-up States
+  const [sendingFollowUpId, setSendingFollowUpId] = useState<string | null>(null);
+  const [followUpSuccess, setFollowUpSuccess] = useState<Record<string, string>>({});
 
   // Date Range Picker States
   const [dateRangeOption, setDateRangeOption] = useState<string>('all');
@@ -75,6 +105,28 @@ export default function Dashboard() {
       .finally(() => {
         setCheckingDb(false);
       });
+  };
+
+  const handlePostBroadcast = async () => {
+    if (!broadcastText.trim()) return;
+    setIsPostingBroadcast(true);
+    setBroadcastSuccess('');
+
+    try {
+      await logAuditEvent({
+        action: 'Team Announcement',
+        entityType: 'system',
+        details: `${user?.displayName || 'Team Member'} (${user?.role || 'Staff'}): "${broadcastText.trim()}"`
+      });
+      setBroadcastText('');
+      setBroadcastSuccess('Announcement successfully broadcasted!');
+      loadDashboardData();
+      setTimeout(() => setBroadcastSuccess(''), 3000);
+    } catch (e) {
+      console.error('[Dashboard] Error posting broadcast announcement:', e);
+    } finally {
+      setIsPostingBroadcast(false);
+    }
   };
 
   const loadDashboardData = () => {
@@ -273,6 +325,33 @@ export default function Dashboard() {
     };
   }, [leads, auditLogs]);
 
+  // Sorted and Filtered Audit Logs for Activity Feed
+  const sortedAndFilteredLogs = useMemo(() => {
+    let list = [...auditLogs];
+
+    list.sort((a, b) => {
+      const timeA = typeof a.createdAt === 'number' ? a.createdAt : Number(a.createdAt) || 0;
+      const timeB = typeof b.createdAt === 'number' ? b.createdAt : Number(b.createdAt) || 0;
+      return timeB - timeA;
+    });
+
+    if (activityCategory !== 'all') {
+      list = list.filter(log => log.entityType === activityCategory);
+    }
+
+    if (activitySearch.trim()) {
+      const query = activitySearch.toLowerCase();
+      list = list.filter(log => 
+        (log.action && log.action.toLowerCase().includes(query)) ||
+        (log.details && log.details.toLowerCase().includes(query)) ||
+        (log.entityType && log.entityType.toLowerCase().includes(query)) ||
+        (log.entityId && log.entityId.toLowerCase().includes(query))
+      );
+    }
+
+    return list;
+  }, [auditLogs, activityCategory, activitySearch]);
+
   // Compute analytics dynamically from active filtered leads
   const stats = useMemo(() => {
     if (!filteredLeads) {
@@ -405,6 +484,81 @@ export default function Dashboard() {
       }
     } catch (e) {
       console.error('Failed to toggle task status:', e);
+    }
+  };
+
+  const dueSoonHighPriorityTasks = useMemo(() => {
+    const pendingTasks = tasks.filter(t => t.status === 'Pending');
+    
+    const mapped = pendingTasks.map(task => {
+      const lead = leads.find(l => l.id === task.leadId);
+      const leadScoreD = lead ? calculateLeadScore(lead) : null;
+      const isHighPriority = !!(lead && (
+        leadScoreD?.level === 'Hot' ||
+        lead.tags?.some(tag => ['high-priority', 'hot', 'priority', 'premium'].includes(tag.toLowerCase())) ||
+        lead.status === 'Follow-up Required'
+      ));
+      return { task, lead, isHighPriority, scoreDetails: leadScoreD };
+    }).filter(item => item.isHighPriority);
+
+    // Sort by task dueDate ascending (nearest due dates first)
+    mapped.sort((a, b) => a.task.dueDate - b.task.dueDate);
+
+    return mapped;
+  }, [tasks, leads]);
+
+  const handleSendFollowUp = async (task: Task, lead: Lead) => {
+    if (!lead) return;
+    setSendingFollowUpId(task.id);
+    
+    const messageText = `Hi ${lead.name}, this is IELTS Revolution CRM team. We have scheduled a follow-up check-in regarding '${task.title}'. How can we assist you today?`;
+    
+    try {
+      const response = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: lead.phone,
+          message: messageText,
+          userId,
+        }),
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.success) {
+        await fetch(`/api/leads/${lead.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notes: `${lead.notes || ""}\n\n[One-click Follow-up SMS sent on ${format(new Date(), "PP p")}]: "${messageText}"`.trim(),
+          }),
+        }).catch(err => console.warn(`Lead notes link sync error for ${lead.name}`, err));
+
+        await logAuditEvent({
+          action: 'Sent Message',
+          entityType: 'campaign',
+          entityId: lead.id,
+          details: `One-click follow-up dispatch for high-priority candidate "${lead.name}" (${lead.phone}) regarding Task: "${task.title}".`
+        });
+
+        setFollowUpSuccess(prev => ({ ...prev, [task.id]: 'Success! SMS Follow-up Sent.' }));
+        setTimeout(() => {
+          setFollowUpSuccess(prev => {
+            const copy = { ...prev };
+            delete copy[task.id];
+            return copy;
+          });
+        }, 5000);
+
+        loadDashboardData();
+      } else {
+        alert(resData.error || "SMS provider rejected follow-up dispatch instruction.");
+      }
+    } catch (err: any) {
+      console.error('[Dashboard] One-click follow-up error:', err);
+      alert(err.message || "Failed to establish follow-up communication request.");
+    } finally {
+      setSendingFollowUpId(null);
     }
   };
 
@@ -1264,7 +1418,424 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-      
+
+      {/* Due Soon & High Priority Follow-ups Section */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 bg-rose-50 text-rose-600 rounded-lg shrink-0">
+              <Clock className="w-5 h-5 animate-pulse" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 font-display">Due Soon & High Priority Follow-ups</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Immediate reminders and follow-up tasks associated with high-scoring or priority leads.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-100 font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shrink-0 uppercase tracking-wider">
+            <Sparkles className="w-3 h-3 text-rose-500" />
+            {dueSoonHighPriorityTasks.length} Reminders Outstanding
+          </span>
+        </div>
+
+        {dueSoonHighPriorityTasks.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {dueSoonHighPriorityTasks.slice(0, 6).map(({ task, lead, scoreDetails }) => {
+              const hasPhone = !!(lead && lead.phone);
+              const isOverdue = task.dueDate < Date.now();
+              const dateColorClass = isOverdue ? 'text-rose-600 bg-rose-50 border-rose-100' : 'text-slate-600 bg-slate-50 border-slate-100';
+              const badgeBg = scoreDetails?.badgeBg || 'bg-amber-100';
+              const badgeText = scoreDetails?.badgeText || 'text-amber-800';
+
+              return (
+                <div 
+                  key={task.id} 
+                  className="bg-slate-50/40 hover:bg-white border border-slate-150/70 hover:border-indigo-200/80 p-4.5 rounded-xl transition-all duration-300 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-sm"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded font-bold text-[9px] uppercase tracking-wider ${dateColorClass} border`}>
+                          {isOverdue ? 'Overdue' : 'Due Soon'}: {format(new Date(task.dueDate), 'MMM dd, yyyy')}
+                        </span>
+                        <h4 className="text-sm font-bold text-slate-800 line-clamp-1 mt-1 font-display" title={task.title}>
+                          {task.title}
+                        </h4>
+                      </div>
+
+                      {scoreDetails && (
+                        <div className="flex flex-col items-end shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${badgeBg} ${badgeText}`}>
+                            {scoreDetails.level} Lead
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono mt-0.5">
+                            Score: {scoreDetails.score}/100
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {lead && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span className="text-xs font-bold text-slate-800">{lead.name}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">({lead.status})</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-slate-500 font-medium">
+                          {lead.phone && (
+                            <div className="flex items-center gap-1">
+                              <Smartphone className="w-3 h-3 text-slate-400" />
+                              <span className="font-mono truncate">{lead.phone}</span>
+                            </div>
+                          )}
+                          {lead.email && (
+                            <div className="flex items-center gap-1">
+                              <Mail className="w-3 h-3 text-slate-400" />
+                              <span className="truncate">{lead.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {task.description && (
+                      <p className="text-xs text-slate-600 italic line-clamp-2">
+                        "{task.description}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={sendingFollowUpId === task.id || !hasPhone || !!followUpSuccess[task.id]}
+                      onClick={() => lead && handleSendFollowUp(task, lead)}
+                      className={`flex-1 min-w-[130px] shadow-xs active:scale-95 text-xs font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all text-white ${
+                        followUpSuccess[task.id]
+                          ? 'bg-emerald-605 bg-emerald-600 cursor-default'
+                          : !hasPhone
+                          ? 'bg-slate-350 cursor-not-allowed opacity-60'
+                          : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'
+                      }`}
+                    >
+                      {sendingFollowUpId === task.id ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Dispatching...</span>
+                        </>
+                      ) : followUpSuccess[task.id] ? (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5 animate-bounce" />
+                          <span>Follow-up Sent! ✓</span>
+                        </>
+                      ) : !hasPhone ? (
+                        <>
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>Phone Missing</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Send Follow-up</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTaskStatus(task)}
+                      className="bg-white hover:bg-slate-50 hover:text-emerald-700 text-slate-500 border border-slate-200 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                      title="Mark task as complete and remove from active list"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5 text-slate-400 hover:text-emerald-500" />
+                      <span className="hidden sm:inline">Complete Task</span>
+                    </button>
+                  </div>
+
+                  {followUpSuccess[task.id] && (
+                    <motion.p
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 border border-emerald-100 p-1.5 rounded text-center animate-pulse"
+                    >
+                      {followUpSuccess[task.id]}
+                    </motion.p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-slate-50/40 border border-dashed border-slate-200/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <ClipboardList className="w-10 h-10 text-slate-300 stroke-[1.25] mb-2" />
+            <p className="text-xs font-bold text-slate-700">No overdue or high priority tasks</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 max-w-sm">
+              All tasks for high-priority or Hot leads are complete! Create tasks for high priority candidates to show action items here.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Activity Feed Section */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <Activity className="w-5 h-5 animate-pulse" />
+              </span>
+              <h2 className="text-lg font-semibold text-slate-900 font-display">Recent Activity & Team Bulletin</h2>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Real-time feed of user actions, new lead creations, pipeline status changes, sent messages, and team announcements.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] bg-indigo-100/60 text-indigo-800 font-bold px-2.5 py-1 rounded-full">
+              {sortedAndFilteredLogs.length} Events Logged
+            </span>
+            <button
+              type="button"
+              onClick={loadDashboardData}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg border border-slate-200/60 transition-colors cursor-pointer"
+              title="Refresh logs stream"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Filters and Inputs row */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Categories selectors */}
+          <div className="flex flex-wrap items-center gap-1.5 border border-slate-150 p-1 bg-slate-50/50 rounded-xl">
+            {[
+              { id: 'all', label: 'All Actions', icon: <Activity className="w-3.5 h-3.5" /> },
+              { id: 'lead', label: 'Leads Only', icon: <Users className="w-3.5 h-3.5" /> },
+              { id: 'task', label: 'Tasks', icon: <CheckSquare className="w-3.5 h-3.5" /> },
+              { id: 'campaign', label: 'Campaigns', icon: <Mail className="w-3.5 h-3.5" /> },
+              { id: 'system', label: 'System/Team', icon: <Sparkles className="w-3.5 h-3.5" /> }
+            ].map(cat => (
+              <button
+                type="button"
+                key={cat.id}
+                onClick={() => setActivityCategory(cat.id as any)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  activityCategory === cat.id
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-white hover:text-slate-900 border border-transparent hover:shadow-xs'
+                }`}
+              >
+                {cat.icon}
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Search bar */}
+          <div className="relative flex-1 max-w-xs min-w-[200px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Query events log..."
+              value={activitySearch}
+              onChange={(e) => setActivitySearch(e.target.value)}
+              className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-medium placeholder-slate-400"
+            />
+            {activitySearch && (
+              <button
+                type="button"
+                onClick={() => setActivitySearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Content split grid: Actions feed stream + Quick broadcast bulletin */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Stream of actions */}
+          <div className="lg:col-span-8 space-y-3.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+            {sortedAndFilteredLogs.length > 0 ? (
+              <div className="relative border-l-2 border-slate-100 pl-4 ml-3 space-y-4 py-2">
+                {sortedAndFilteredLogs.slice(0, 30).map((log, index) => {
+                  let badgeColor = 'bg-slate-50 text-slate-600 border-slate-200';
+                  let bgHover = 'hover:bg-slate-50/50';
+                  let icon = <Clock className="w-4 h-4" />;
+                  
+                  if (log.entityType === 'lead') {
+                    badgeColor = 'bg-indigo-50 text-indigo-700 border-indigo-100';
+                    icon = <Users className="w-4 h-4" />;
+                  } else if (log.entityType === 'task') {
+                    if (log.action.includes('Complete') || log.action.includes('Completed')) {
+                      badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                      icon = <CheckCircle className="w-4 h-4" />;
+                    } else {
+                      badgeColor = 'bg-blue-50 text-blue-700 border-blue-100';
+                      icon = <CheckSquare className="w-4 h-4" />;
+                    }
+                  } else if (log.entityType === 'campaign') {
+                    badgeColor = 'bg-amber-50 text-amber-700 border-amber-100';
+                    icon = <Mail className="w-4 h-4" />;
+                  } else if (log.entityType === 'system' || log.action === 'Team Announcement') {
+                    badgeColor = 'bg-purple-50 text-purple-700 border-purple-100';
+                    icon = <Sparkles className="w-4 h-4" />;
+                  }
+
+                  // Determine color-coded status badge for different event categories
+                  let categoryBadge: { text: string; bg: string } | null = null;
+                  const actLower = log.action.toLowerCase();
+                  if (actLower.includes('acquired') || actLower.includes('lead acquired') || actLower.includes('new lead') || actLower.includes('lead created')) {
+                    categoryBadge = { text: 'New Lead', bg: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/50' };
+                  } else if (actLower.includes('campaign') || actLower.includes('sms') || actLower.includes('message') || actLower.includes('sent') || actLower.includes('launch') || actLower.includes('broad')) {
+                    categoryBadge = { text: 'Sent Message', bg: 'bg-blue-100/80 text-blue-800 border-blue-200/50' };
+                  } else if (actLower.includes('status') || actLower.includes('transition') || actLower.includes('stage') || actLower.includes('pipeline')) {
+                    categoryBadge = { text: 'Status Update', bg: 'bg-orange-100/80 text-orange-800 border-orange-200/50' };
+                  } else if (log.entityType === 'task' || actLower.includes('task')) {
+                    categoryBadge = { text: 'Task Update', bg: 'bg-indigo-100/80 text-indigo-800 border-indigo-200/50' };
+                  } else {
+                    categoryBadge = { text: 'System', bg: 'bg-slate-100 text-slate-700 border-slate-200/50' };
+                  }
+
+                  const formattedTime = getRelativeTime(log.createdAt);
+
+                  return (
+                    <motion.div
+                      key={log.id || index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.4) }}
+                      className={`relative flex items-start gap-3.5 p-3 rounded-xl border border-transparent ${bgHover} hover:border-slate-100 group transition-all`}
+                    >
+                      {/* Timeline dot */}
+                      <span className="absolute -left-[23px] top-[18px] w-2 h-2 rounded-full border border-white bg-slate-300 group-hover:bg-indigo-500 group-hover:scale-120 transition-all z-10"></span>
+
+                      {/* Icon Avatar badge */}
+                      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${badgeColor}`}>
+                        {icon}
+                      </div>
+
+                      {/* Detail Column */}
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5 flex-wrap">
+                            {log.action}
+                            {categoryBadge && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${categoryBadge.bg} transition-all`}>
+                                {categoryBadge.text}
+                              </span>
+                            )}
+                            {log.entityId && (
+                              <span className="font-mono text-[9px] text-slate-400 bg-slate-50 border border-slate-100 px-1 py-0.5 rounded leading-none">
+                                ID: {log.entityId.slice(0, 8)}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold shrink-0">
+                            {formattedTime}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                          {log.details}
+                        </p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 px-4 border border-dashed border-slate-150 rounded-2xl bg-slate-50/20 flex flex-col items-center justify-center">
+                <Inbox className="w-8 h-8 text-slate-300 stroke-[1.5] mb-2" />
+                <p className="text-xs font-semibold text-slate-600">No matching activities found</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-xs leading-relaxed">
+                  We couldn't find any recent actions for this filter. Try adjusting your query or categories selectors.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Announcement Broadcast bulletin */}
+          <div className="lg:col-span-4 space-y-5 border border-slate-150 rounded-2xl p-5 bg-slate-50/50">
+            <div>
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                Broadcast Team Announcement
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Pin a custom announcement or broadcast update instantly visible to the active team on their feed dashboard in real time.
+              </p>
+            </div>
+
+            <div className="space-y-3.5">
+              <div className="relative">
+                <textarea
+                  placeholder="Type an announcement to broadcast to your team, e.g., 'Payment classes audit starting at 4 PM'..."
+                  rows={3}
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
+                  className="w-full border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none p-3 rounded-xl text-xs text-slate-700 placeholder-slate-400 bg-white shadow-xs resize-none"
+                />
+              </div>
+
+              {broadcastSuccess && (
+                <div className="p-2.5 text-[11px] font-bold bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl animate-in fade-in">
+                  {broadcastSuccess}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handlePostBroadcast}
+                  disabled={isPostingBroadcast || !broadcastText.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm shadow-indigo-100 transition-all cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isPostingBroadcast ? 'Broadcasting...' : 'Post Bulletin'}
+                </button>
+              </div>
+            </div>
+
+            {/* Micro Team Insights */}
+            <div className="border-t border-slate-200/60 pt-4 space-y-3">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Active System Transparency Indicators
+              </h4>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Leads Acquired Today
+                  </span>
+                  <span className="font-bold text-slate-900 font-mono">
+                    {leads.filter(l => isSameDay(new Date(Number(l.createdAt) || 0), new Date())).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Completed Tasks Today
+                  </span>
+                  <span className="font-bold text-slate-900 font-mono">
+                    {tasks.filter(t => t.status === 'Completed' && t.updatedAt && isSameDay(new Date(Number(t.updatedAt) || 0), new Date())).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span> Active Campaigns Broadly
+                  </span>
+                  <span className="font-bold text-slate-900 font-mono">{campaigns.length}</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
         <QuickActionCard 
           icon={<Smartphone className="w-5 h-5 text-indigo-600" />} 

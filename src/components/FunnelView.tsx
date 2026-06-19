@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Phone, Mail, GripVertical, CheckCircle } from 'lucide-react';
+import { Phone, Mail, GripVertical, CheckCircle, RefreshCw, AlertCircle, Check, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { logAuditEvent } from '../utils/auditLogger';
 import type { Lead, LeadStatus } from '../types';
 
-const STATUSES: LeadStatus[] = ['New Lead', 'Contact', 'Consultation Booked', 'Demo Class Booked', 'Payment Pending', 'Re-engagement Offer', 'Enrolled', 'Follow-up Required', 'Discarded'];
+const STATUSES: LeadStatus[] = [
+  'New Lead',
+  'Contact',
+  'Follow-up Required',
+  'Consultation Booked',
+  'Counseling Done',
+  'Demo Class Booked',
+  'Payment Pending',
+  'Re-engagement Offer',
+  'Enrolled',
+  'Discarded'
+];
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   'New Lead': 'New Lead',
@@ -38,6 +49,7 @@ export default function FunnelView() {
   const [loading, setLoading] = useState(true);
   const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
   
   const { user } = useAuth();
   const userId = user?.uid || 'ielts_crm_main_user';
@@ -56,11 +68,17 @@ export default function FunnelView() {
   }, [userId]);
 
   const updateLeadStatus = async (id: string, newStatus: LeadStatus) => {
-    // Optimistically update the UI status immediately
     const prevLeads = [...leads];
     const leadObj = leads.find(l => l.id === id);
     if (!leadObj) return;
 
+    // Show dynamic updating status toast
+    setNotification({
+      message: `Moving ${leadObj.name} to "${STATUS_LABELS[newStatus] || newStatus}"...`,
+      type: 'info'
+    });
+
+    // Optimistically update the UI status immediately
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
 
     try {
@@ -80,10 +98,28 @@ export default function FunnelView() {
         entityId: id,
         details: `Lead "${leadObj.name}" status transitioned from "${leadObj.status}" to "${newStatus}".`
       });
+
+      setNotification({
+        message: `Successfully moved ${leadObj.name} to "${STATUS_LABELS[newStatus] || newStatus}"!`,
+        type: 'success'
+      });
+      
+      setTimeout(() => {
+        setNotification(curr => curr?.message.includes(leadObj.name) ? null : curr);
+      }, 3000);
     } catch (e) {
       console.error('Error updating status:', e);
       // Revert in case of standard errors
       setLeads(prevLeads);
+      
+      setNotification({
+        message: `Failed to move ${leadObj.name}. Database update reverted.`,
+        type: 'error'
+      });
+      
+      setTimeout(() => {
+        setNotification(curr => curr?.message.includes(leadObj.name) ? null : curr);
+      }, 4000);
     }
   };
 
@@ -91,11 +127,42 @@ export default function FunnelView() {
 
   return (
     <div className="h-full flex flex-col animate-in fade-in duration-500 -mt-2">
-      <div className="mb-6 shrink-0 px-1">
-        <h1 className="text-2xl font-display font-semibold text-slate-900">Pipeline Funnel</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Drag and drop lead cards below to gracefully transfer candidates across milestones, or use fallback status dropdown selectors.
-        </p>
+      {/* Floating Live Sync Toast */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.95 }}
+            className={`fixed top-24 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold backdrop-blur-md ${
+              notification.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : notification.type === 'error'
+                  ? 'bg-rose-600 text-white border-rose-500'
+                  : 'bg-slate-900/95 text-white border-slate-800'
+            }`}
+          >
+            {notification.type === 'info' && <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-300" />}
+            {notification.type === 'success' && <Check className="w-3.5 h-3.5 stroke-[3] text-white" />}
+            {notification.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-white" />}
+            <span>{notification.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mb-6 shrink-0 px-1 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-semibold text-slate-900">Pipeline Funnel</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Drag and drop lead cards below to gracefully transfer candidates across milestones, updating their status in the database automatically.
+          </p>
+        </div>
+        {draggingLeadId && (
+          <div className="bg-indigo-50 border border-indigo-150/80 px-3 py-1.5 rounded-xl text-xs text-indigo-700 font-semibold animate-pulse flex items-center gap-1.5 shadow-xs self-start sm:self-center">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+            Active Stage Drag in Progress
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto md:overflow-x-auto pb-6 -mx-4 px-4 md:-mx-8 md:px-8">
@@ -116,10 +183,16 @@ export default function FunnelView() {
                   isTargetColumn 
                     ? 'border-indigo-400 bg-indigo-50/60 ring-4 ring-indigo-500/10 shadow-md scale-[1.01]' 
                     : isAnyCardDragging
-                      ? 'border-dashed border-slate-300 bg-slate-50/40 opacity-85'
+                      ? 'border-dashed border-indigo-200 bg-indigo-50/5 opacity-90'
                       : 'border-slate-200/90 bg-slate-50/90 shadow-xs'
                 }`}
                 onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverStatus !== status) {
+                    setDragOverStatus(status);
+                  }
+                }}
+                onDragEnter={(e) => {
                   e.preventDefault();
                   if (dragOverStatus !== status) {
                     setDragOverStatus(status);
@@ -195,10 +268,12 @@ export default function FunnelView() {
                               damping: 25,
                               layout: { type: "spring", stiffness: 350, damping: 28 }
                             }}
-                            className={`bg-white p-3.5 rounded-xl border transition-colors relative group cursor-grab active:cursor-grabbing ${
+                            className={`bg-white p-3.5 rounded-xl border transition-all duration-200 relative group cursor-grab active:cursor-grabbing ${
                               isBeingDragged
-                                ? 'border-dashed border-indigo-400 bg-indigo-50/10'
-                                : 'border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
+                                ? 'border-dashed border-indigo-400 bg-indigo-50/10 shadow-inner opacity-40'
+                                : isAnyCardDragging
+                                  ? 'border-slate-200/50 opacity-80 pointer-events-none'
+                                  : 'border-slate-200/80 hover:border-indigo-200 hover:shadow-xs'
                             }`}
                           >
                             <div className="flex justify-between items-start gap-1 pb-1">
@@ -250,9 +325,17 @@ export default function FunnelView() {
                         );
                       })
                     ) : (
-                      <div className="py-8 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50 flex flex-col items-center justify-center gap-1 h-full min-h-[110px]">
-                        <CheckCircle className="w-4 h-4 text-slate-200" />
-                        <span className="text-[10px] font-medium text-slate-400 select-none">No leads in stage</span>
+                      <div className={`py-8 px-4 text-center border border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 min-h-[115px] ${
+                        isTargetColumn 
+                          ? 'border-indigo-400 bg-indigo-100/30 text-indigo-700 font-semibold' 
+                          : isAnyCardDragging
+                            ? 'border-indigo-200 bg-indigo-50/10 text-indigo-400'
+                            : 'border-slate-200 bg-slate-50/50 text-slate-400'
+                      }`}>
+                        <CheckCircle className={`w-4 h-4 transition-transform duration-300 ${isTargetColumn ? 'scale-125 text-indigo-600 animate-bounce' : 'text-slate-300'}`} />
+                        <span className="text-[10px] font-medium select-none">
+                          {isTargetColumn ? 'Drop Lead Here!' : isAnyCardDragging ? 'Drop Target Stage' : 'No leads in stage'}
+                        </span>
                       </div>
                     )}
                   </AnimatePresence>

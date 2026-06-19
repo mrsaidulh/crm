@@ -21,6 +21,7 @@ import {
   Upload,
   ChevronRight,
   ChevronDown,
+  Eye,
   GraduationCap,
   Sliders,
   BookOpen,
@@ -1497,7 +1498,15 @@ export default function LeadsView() {
   };
 
   const handleExportCSV = () => {
-    if (leads.length === 0) return;
+    const isAdmin = isSuperAdmin || user?.role === 'Admin';
+    if (!isAdmin) {
+      alert("Access Denied: Only admins are authorized to download CRM list data as CSV files.");
+      return;
+    }
+    if (sortedLeads.length === 0) {
+      alert("No leads found in the current filtered list to export.");
+      return;
+    }
     const headers = [
       "Name",
       "Email",
@@ -1513,7 +1522,7 @@ export default function LeadsView() {
       "Created At",
     ];
 
-    const rows = leads.map((lead) => [
+    const rows = sortedLeads.map((lead) => [
       lead.name,
       lead.email,
       lead.phone,
@@ -1601,6 +1610,12 @@ export default function LeadsView() {
     const clean = phone.trim().replace(/[\s-]/g, "");
     return (duplicatePhones.get(clean) || 0) > 1;
   };
+
+  const totalLeadsWithDuplicates = React.useMemo(() => {
+    return leads.filter(
+      (l) => isDuplicateEmail(l.email) || isDuplicatePhone(l.phone),
+    ).length;
+  }, [leads, duplicateEmails, duplicatePhones]);
 
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
@@ -1696,14 +1711,16 @@ export default function LeadsView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={handleExportCSV}
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-            title="Export leads to a CSV file"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            Export Leads
-          </button>
+          {(isSuperAdmin || user?.role === 'Admin') && (
+            <button
+              onClick={handleExportCSV}
+              className="bg-white hover:bg-slate-50 text-slate-705 text-indigo-600 hover:text-indigo-805 border border-indigo-200/60 hover:border-indigo-300 px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-xs"
+              title="Download currents leads as a CSV file"
+            >
+              <Download className="w-4 h-4 text-indigo-500 animate-pulse" />
+              Download CSV
+            </button>
+          )}
           <button
             onClick={() => setIsBulkImportOpen(true)}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
@@ -2186,6 +2203,62 @@ export default function LeadsView() {
           </div>
         )}
 
+        {/* Potential CRM Duplicates Detected warning banner */}
+        {totalLeadsWithDuplicates > 0 && (
+          <div className={`p-4 mx-6 my-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all duration-300 ${
+            showDuplicatesOnly 
+              ? "bg-amber-50 hover:bg-amber-100/30 border-amber-300 text-amber-900" 
+              : "bg-amber-50/40 hover:bg-amber-50 border-amber-250/50 text-amber-800"
+          }`}>
+            <div className="flex items-start gap-3">
+              <span className={`p-1.5 rounded-lg shrink-0 ${
+                showDuplicatesOnly ? "bg-amber-200 text-amber-800" : "bg-amber-100 text-amber-700"
+              }`}>
+                <AlertTriangle className="w-4 h-4 animate-pulse text-amber-600" />
+              </span>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 text-amber-950 font-display">
+                  Potential CRM Duplicates Detected
+                  {showDuplicatesOnly && (
+                    <span className="bg-amber-200 text-amber-900 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border border-amber-350 uppercase tracking-widest">
+                      Active Filter
+                    </span>
+                  )}
+                </h4>
+                <p className="text-xs text-amber-800/90 leading-relaxed">
+                  {showDuplicatesOnly ? (
+                    <>
+                      Currently displaying only the <strong>{totalLeadsWithDuplicates} leads</strong> that have duplicate phone numbers or email addresses in the database. You can review, merge details, or delete stale records.
+                    </>
+                  ) : (
+                    <>
+                      There are <strong>{totalLeadsWithDuplicates} leads</strong> sharing duplicate phone numbers or email addresses in your database.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+              className="bg-white hover:bg-amber-50/80 hover:text-amber-950 text-amber-900 border border-amber-205 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer ml-auto sm:ml-0"
+            >
+              {showDuplicatesOnly ? (
+                <>
+                  <X className="w-3.5 h-3.5 text-amber-600" />
+                  Clear Duplicate Filter
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-amber-600" />
+                  View/Filter Duplicates
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
@@ -2350,9 +2423,10 @@ export default function LeadsView() {
                               )}
                               {isDuplicatePhone(lead.phone) && (
                                 <span
-                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60"
                                   title="Duplicate Phone Number detected"
                                 >
+                                  <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0 animate-pulse" />
                                   Duplicate Phone
                                 </span>
                               )}
@@ -2361,9 +2435,10 @@ export default function LeadsView() {
                               <Mail className="w-3.5 h-3.5" /> {lead.email}
                               {isDuplicateEmail(lead.email) && (
                                 <span
-                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60"
                                   title="Duplicate Email Address detected"
                                 >
+                                  <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0 animate-pulse" />
                                   Duplicate Email
                                 </span>
                               )}
